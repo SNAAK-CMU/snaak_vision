@@ -49,3 +49,9 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# Virtual Environments
+**/.venv/
+
+# Any test images
+**/*.png
