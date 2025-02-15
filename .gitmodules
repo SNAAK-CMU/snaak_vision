@@ -1,0 +1,3 @@
+[submodule "coordinates/src/unet"]
+	path = coordinates/src/unet
+	url = https://github.com/SNAAK-CMU/UNet
