@@ -1,0 +1,7 @@
+int32 bin_ID
+float32 timestamp
+
+---
+int32 x
+int32 y
+float32 depth
