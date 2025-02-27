@@ -85,6 +85,13 @@ class VisionNode(Node):
     def rgb_callback(self, msg):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
 
+    def camera_intriniscs_callback(self, msg):
+        intrinsic_matrix = msg.k 
+        self.K = np.array(intrinsic_matrix).reshape((3, 3))
+        self.distortion_coefficients = msg.d
+        self.width = msg.width
+        self.height = msg.height
+
     def handle_get_depth(self, request, response): #separate this from service callback stuff so the same function can be used for pickup point service
         if self.depth_image is None:
             self.get_logger().warn("Depth image not available yet!")
@@ -105,13 +112,6 @@ class VisionNode(Node):
             response.depth = float('nan')
 
         return response
-    
-    def camera_intriniscs_callback(self, msg):
-        intrinsic_matrix = msg.k 
-        self.K = np.array(intrinsic_matrix).reshape((3, 3))
-        self.distortion_coefficients = msg.d
-        self.width = msg.width
-        self.height = msg.height
 
     def transform_location(self, x, y, depth):
         '''
@@ -132,18 +132,17 @@ class VisionNode(Node):
                 T_local[:3, 3] = translation
                 transform_matrices[(frame_id, child_frame_id)] = T_local
 
-        T_hand_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
+        T_link0_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
 
         distorted_point = np.array([[x, y]], dtype=np.float32)
         undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
         x_undistorted, y_undistorted = undistorted_point[0][0]
 
-
         x = (x_undistorted - self.K[0, 2]) * depth / self.K[0, 0]
         y = (y_undistorted - self.K[1, 2]) * depth / self.K[1, 1]
         z = depth
         point = np.array([x, y, z])  
-        return T_hand_camera@point    
+        return T_link0_camera@point    
 
 
     def handle_pickup_point(self, request, response):
@@ -154,11 +153,11 @@ class VisionNode(Node):
             # Cheese
             try:
                 # Get X, Y
-                mask = self.cheese_unet.detect_image(image)
+                mask = self.cheese_unet.detect_image(self.rgb_image)
                 top_layer_mask = self.cheese_unet.get_top_layer(mask, [250, 106, 77]) #TODO make color a config
-                binary_mask = Image.fromarray(img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
-                binary_mask_edges, cont = img_utils.find_edges_in_binary_image(np.array(binary_mask))
-                (response.x, response.y) = img_utils.get_contour_center(cont)
+                binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
+                binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
+                (response.x, response.y) = self.img_utils.get_contour_center(cont)
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
@@ -169,17 +168,23 @@ class VisionNode(Node):
                 # Retrieve depth value at (x, y)
                 response.depth = float(self.depth_image[response.y, response.x]) / 1000.0  # Convert mm to meters
                 self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
+
+                response_transformed = self.transform_location(response.x, response.y, response.z)
+                response.x = response_transformed[0]
+                response.y = response_transformed[1]
+                response.z = response_transformed[2]
+
             except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
                 response.x = -1
                 response.y = -1
                 response.depth = float('nan')
         
-        return response        
+        return response
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DepthService()
+    node = VisionNode()
     rclpy.spin(node)
     rclpy.shutdown()
 
