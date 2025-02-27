@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
+#author: Oliver
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from coordinates.srv import GetDepthAtPoint, GetXYZFromImage
+from coordinates.srv import GetDepthAtPoint
+from coordinates.srv import GetXYZFromImage
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from unet.Ingredients_UNet import Ingredients_UNet
-from post_processing.image_utlis import ImageUtils
+# from unet.Ingredients_UNet import Ingredients_UNet
+# from post_processing.image_utlis import ImageUtils
 from tf2_msgs.msg import TFMessage
 import numpy as np
 from sensor_msgs.msg import CameraInfo
 import cv2
+from scipy.spatial.transform import Rotation as R
+
 
 #Make these config
 CHEESE_BIN_ID = 1
@@ -24,16 +28,16 @@ qos_profile = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 class VisionNode(Node):
     def __init__(self):
-        super().__init__('depth_service')
+        super().__init__('vision_node')
         self.bridge = CvBridge()
         self.depth_image = None
         self.rgb_image = None
 
         # Start UNet 
-        self.cheese_unet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/top_and_other/best_epoch_weights.pth") #TODO make these config 
+        # self.cheese_unet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/top_and_other/best_epoch_weights.pth") #TODO make these config 
 
         # post processing stuff
-        self.img_utils = ImageUtils()
+        # self.img_utils = ImageUtils()
 
         # Subscribe to depth image topic (adjust topic name as needed)
         self.depth_subscription = self.create_subscription(
@@ -45,20 +49,20 @@ class VisionNode(Node):
         # Subscribe to rgb image topic
         self.RGB_subscription = self.create_subscription(
             Image, 
-            '', #TODO!
+            '/camera/camera/color/image_rect_raw', 
             self.rgb_callback,
             10
         )
 
         # Create the service server
-        self.service = self.create_service(GetDepthAtPoint, 'get_depth_at_point', self.handle_get_depth)
+        self.service = self.create_service(GetDepthAtPoint, self.get_name()+'/get_depth_at_point', self.handle_get_depth)
 
         # Create the pickup point service server
-        self.pickup_point_service = self.create_service(GetXYZFromImage, 'get_pickup_point', self.handle_pickup_point)
+        self.pickup_point_service = self.create_service(GetXYZFromImage, self.get_name()+'/get_pickup_point', self.handle_pickup_point)
 
         self.subscription_tf = self.create_subscription(TFMessage, '/tf', self.tf_listener_callback_tf, 10)
         self.subscription_intrinsics = self.create_subscription(CameraInfo, '/camera/camera/color/camera_info', self.camera_intrinsics_callback, 10) # TODO fix this
-        self.subscription_tf_static = self.create_subscription(TFMessage,'/tf_static', self.static_tf_listener_callback_tf_static, qos_profile)
+        self.subscription_tf_static = self.create_subscription(TFMessage,'/tf_static', self.tf_static_listener_callback_tf_static, qos_profile)
         
         self.transformations = {}
         self.K = np.eye(3)
@@ -85,12 +89,16 @@ class VisionNode(Node):
     def rgb_callback(self, msg):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
 
-    def camera_intriniscs_callback(self, msg):
+    def camera_intrinsics_callback(self, msg):
         intrinsic_matrix = msg.k 
         self.K = np.array(intrinsic_matrix).reshape((3, 3))
-        self.distortion_coefficients = msg.d
+        self.distortion_coefficients = np.array(msg.d)
         self.width = msg.width
         self.height = msg.height
+    
+    def quaternion_to_rotation_matrix(self, x, y, z, w):
+        """ Convert a quaternion into a full three-dimensional rotation matrix. """
+        return R.from_quat([x, y, z, w]).as_matrix()
 
     def handle_get_depth(self, request, response): #separate this from service callback stuff so the same function can be used for pickup point service
         if self.depth_image is None:
@@ -122,6 +130,9 @@ class VisionNode(Node):
             ('panda_link0','panda_hand'), ('panda_hand','camera_color_optical_frame'),
         ]
         transform_matrices = {}
+
+        self.get_logger().info("here")
+
         for (frame_id, child_frame_id) in link_order:
             if (frame_id, child_frame_id) in self.transformations:
                 trans = self.transformations[(frame_id, child_frame_id)].transform
@@ -131,6 +142,8 @@ class VisionNode(Node):
                 T_local[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
                 T_local[:3, 3] = translation
                 transform_matrices[(frame_id, child_frame_id)] = T_local
+        
+        self.get_logger().info("here1")
 
         T_link0_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
 
@@ -141,23 +154,29 @@ class VisionNode(Node):
         x = (x_undistorted - self.K[0, 2]) * depth / self.K[0, 0]
         y = (y_undistorted - self.K[1, 2]) * depth / self.K[1, 1]
         z = depth
-        point = np.array([x, y, z])  
-        return T_link0_camera@point    
+        point_cam = np.array([x, y, z, 1])
+        point_base_link = T_link0_camera@point_cam
+        return point_base_link[:3]    
 
 
     def handle_pickup_point(self, request, response):
-        bin_ID = request.bin_ID
+        bin_id = request.bin_id
         timestamp = request.timestamp #use this to sync
+        image = self.rgb_image
 
-        if bin_ID == CHEESE_BIN_ID: 
+        self.get_logger().info(f"{image.shape}")
+
+        if bin_id == CHEESE_BIN_ID: 
             # Cheese
             try:
                 # Get X, Y
-                mask = self.cheese_unet.detect_image(self.rgb_image)
-                top_layer_mask = self.cheese_unet.get_top_layer(mask, [250, 106, 77]) #TODO make color a config
-                binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
-                binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
-                (response.x, response.y) = self.img_utils.get_contour_center(cont)
+                # mask = self.cheese_unet.detect_image(self.rgb_image)
+                # top_layer_mask = self.cheese_unet.get_top_layer(mask, [250, 106, 77]) #TODO make color a config
+                # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
+                # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
+                # (response.x, response.y) = self.img_utils.get_contour_center(cont)
+                cam_x = 443
+                cam_y = 224
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
@@ -166,18 +185,19 @@ class VisionNode(Node):
                     raise ValueError("Coordinates out of bounds")
 
                 # Retrieve depth value at (x, y)
-                response.depth = float(self.depth_image[response.y, response.x]) / 1000.0  # Convert mm to meters
-                self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
+                response.depth = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+                # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
-                response_transformed = self.transform_location(response.x, response.y, response.z)
+                self.get_logger().info(f"{response.depth}")    
+                response_transformed = self.transform_location(cam_x, cam_y, response.depth)
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
-                response.z = response_transformed[2]
+                response.depth = response_transformed[2]
 
             except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
-                response.x = -1
-                response.y = -1
+                response.x = -1.0
+                response.y = -1.0
                 response.depth = float('nan')
         
         return response

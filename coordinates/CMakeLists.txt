@@ -12,12 +12,13 @@ find_package(rosidl_default_generators REQUIRED)
 # Add service files to be generated
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetDepthAtPoint.srv"
+  "srv/GetXYZFromImage.srv"
   DEPENDENCIES std_msgs sensor_msgs
 )
 
 # Install Python scripts (nodes)
 install(
-  PROGRAMS src/depth_service.py
+  PROGRAMS src/vision_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
