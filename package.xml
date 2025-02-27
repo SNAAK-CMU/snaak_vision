@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>coordinates</name>
+  <name>snaak_vision</name>
   <version>0.1.0</version>
   <description>A ROS 2 package defining custom interfaces for RealSense depth retrieval.</description>
 

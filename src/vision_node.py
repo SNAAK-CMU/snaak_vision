@@ -6,6 +6,9 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from coordinates.srv import GetDepthAtPoint
 from coordinates.srv import GetXYZFromImage
+import os
+import time
+
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
 # from unet.Ingredients_UNet import Ingredients_UNet
@@ -88,6 +91,16 @@ class VisionNode(Node):
     
     def rgb_callback(self, msg):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+        image_path = '~/Documents/image_test/image.png'
+        cv2.imwrite(image_path, self.rgb_image)
+
+    def wait_for_text(self):
+        txt_path = 'Documents/image_test/image.txt'
+        while not os.path.exists(txt_path):
+            time.sleep(0.1)
+        with open(txt_path, 'r') as file:
+            for line in file:
+                pass
 
     def camera_intrinsics_callback(self, msg):
         intrinsic_matrix = msg.k 
@@ -185,20 +198,22 @@ class VisionNode(Node):
                     raise ValueError("Coordinates out of bounds")
 
                 # Retrieve depth value at (x, y)
-                response.depth = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+                cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+                if cam_z == 0:
+                    raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
                 self.get_logger().info(f"{response.depth}")    
-                response_transformed = self.transform_location(cam_x, cam_y, response.depth)
+                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
-                response.depth = response_transformed[2]
+                response.z = response_transformed[2]
 
             except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
                 response.x = -1.0
                 response.y = -1.0
-                response.depth = float('nan')
+                response.z = float('nan')
         
         return response
 
