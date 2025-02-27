@@ -5,14 +5,21 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from coordinates.srv import GetDepthAtPoint, GetXYZFromImage
 
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from unet.Ingredients_UNet import Ingredients_UNet
 from post_processing.image_utlis import ImageUtils
-
+from tf2_msgs.msg import TFMessage
+import numpy as np
+from sensor_msgs.msg import CameraInfo
+import cv2
 
 #Make these config
 CHEESE_BIN_ID = 1
 HAM_BIN_ID = 2
 BREAD_BIN_ID = 3
+
+
+qos_profile = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 
 class VisionNode(Node):
@@ -49,6 +56,28 @@ class VisionNode(Node):
         # Create the pickup point service server
         self.pickup_point_service = self.create_service(GetXYZFromImage, 'get_pickup_point', self.handle_pickup_point)
 
+        self.subscription_tf = self.create_subscription(TFMessage, '/tf', self.tf_listener_callback_tf, 10)
+        self.subscription_intrinsics = self.create_subscription(CameraInfo, '/camera/camera/color/camera_info', self.camera_intrinsics_callback, 10) # TODO fix this
+        self.subscription_tf_static = self.create_subscription(TFMessage,'/tf_static', self.static_tf_listener_callback_tf_static, qos_profile)
+        
+        self.transformations = {}
+        self.K = np.eye(3)
+        self.distortion_coefficients = np.zeros((1, 5))
+        self.width = 0
+        self.height = 0
+
+    def tf_listener_callback_tf(self, msg):
+        """ Handle incoming transform messages. """
+        for transform in msg.transforms:
+            if transform.child_frame_id and transform.header.frame_id:
+                self.transformations[(transform.header.frame_id, transform.child_frame_id)] = transform
+
+    def tf_static_listener_callback_tf_static(self, msg):
+        """ Handle incoming transform messages. """
+        for transform in msg.transforms:
+            if transform.child_frame_id and transform.header.frame_id:
+                self.transformations[(transform.header.frame_id, transform.child_frame_id)] = transform
+
     def depth_callback(self, msg):
         # Convert ROS Image message to OpenCV format
         self.depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
@@ -77,6 +106,46 @@ class VisionNode(Node):
 
         return response
     
+    def camera_intriniscs_callback(self, msg):
+        intrinsic_matrix = msg.k 
+        self.K = np.array(intrinsic_matrix).reshape((3, 3))
+        self.distortion_coefficients = msg.d
+        self.width = msg.width
+        self.height = msg.height
+
+    def transform_location(self, x, y, depth):
+        '''
+        Modified Version of code from handeye_calibration_ros2
+        '''
+        T = np.eye(4)
+        link_order = [
+            ('panda_link0','panda_hand'), ('panda_hand','camera_color_optical_frame'),
+        ]
+        transform_matrices = {}
+        for (frame_id, child_frame_id) in link_order:
+            if (frame_id, child_frame_id) in self.transformations:
+                trans = self.transformations[(frame_id, child_frame_id)].transform
+                translation = [trans.translation.x, trans.translation.y, trans.translation.z]
+                rotation = [trans.rotation.x, trans.rotation.y, trans.rotation.z, trans.rotation.w]
+                T_local = np.eye(4)
+                T_local[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
+                T_local[:3, 3] = translation
+                transform_matrices[(frame_id, child_frame_id)] = T_local
+
+        T_hand_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
+
+        distorted_point = np.array([[x, y]], dtype=np.float32)
+        undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
+        x_undistorted, y_undistorted = undistorted_point[0][0]
+
+
+        x = (x_undistorted - self.K[0, 2]) * depth / self.K[0, 0]
+        y = (y_undistorted - self.K[1, 2]) * depth / self.K[1, 1]
+        z = depth
+        point = np.array([x, y, z])  
+        return T_hand_camera@point    
+
+
     def handle_pickup_point(self, request, response):
         bin_ID = request.bin_ID
         timestamp = request.timestamp #use this to sync
