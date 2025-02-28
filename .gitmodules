@@ -3,4 +3,4 @@
 	url = https://github.com/SNAAK-CMU/UNet
 [submodule "src/cheese_segmentation"]
 	path = src/cheese_segmentation
-	url = git@github.com:SNAAK-CMU/cheese_segmentation.git
+	url = https://github.com/SNAAK-CMU/cheese_segmentation.git
