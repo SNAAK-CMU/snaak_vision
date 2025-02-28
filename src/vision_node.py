@@ -12,13 +12,14 @@ import json
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
-# from unet.Ingredients_UNet import Ingredients_UNet
-# from post_processing.image_utlis import ImageUtils
+from post_processing.image_utlis import ImageUtils
 from tf2_msgs.msg import TFMessage
 import numpy as np
 from sensor_msgs.msg import CameraInfo
 import cv2
 from scipy.spatial.transform import Rotation as R
+
+from cheese_segmentation.cheese_segment_generator import CheeseSegmentGenerator
 
 
 #Make these config
@@ -41,7 +42,10 @@ class VisionNode(Node):
         # self.cheese_unet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/top_and_other/best_epoch_weights.pth") #TODO make these config 
 
         # post processing stuff
-        # self.img_utils = ImageUtils()
+        self.img_utils = ImageUtils()
+
+        # init cheese segmentation object
+        self.cheese_segment_generator = CheeseSegmentGenerator()
 
         # Subscribe to depth image topic (adjust topic name as needed)
         self.depth_subscription = self.create_subscription(
@@ -166,7 +170,6 @@ class VisionNode(Node):
         point_base_link = T_link0_camera@point_cam
         return point_base_link[:3]    
 
-
     def handle_pickup_point(self, request, response):
         bin_id = request.bin_id
         timestamp = request.timestamp #use this to sync
@@ -183,8 +186,14 @@ class VisionNode(Node):
                 # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
                 # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
                 # (response.x, response.y) = self.img_utils.get_contour_center(cont)
-                cam_x = 443
-                cam_y = 224
+
+                mask = self.cheese_segment_generator.get_top_cheese_slice(self.rgb_image)
+                binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(mask)))
+                binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
+                (cam_x, cam_y) = self.img_utils.get_contour_center(cont)
+
+                # cam_x = 443
+                # cam_y = 224
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
