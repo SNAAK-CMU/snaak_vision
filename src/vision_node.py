@@ -4,10 +4,11 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
-from coordinates.srv import GetDepthAtPoint
-from coordinates.srv import GetXYZFromImage
+from snaak_vision.srv import GetDepthAtPoint
+from snaak_vision.srv import GetXYZFromImage
 import os
 import time
+import json
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -95,16 +96,10 @@ class VisionNode(Node):
     
     def rgb_callback(self, msg):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-        image_path = '~/Documents/image_test/image.png'
-        cv2.imwrite(image_path, self.rgb_image)
-
-    def wait_for_text(self):
-        txt_path = 'Documents/image_test/image.txt'
-        while not os.path.exists(txt_path):
-            time.sleep(0.1)
-        with open(txt_path, 'r') as file:
-            for line in file:
-                pass
+        # image_path = '/home/snaak/Documents/image_test/image.png'
+        # # print(self.rgb_image.shape)
+        # img_rgb = cv2.cvtColor(self.rgb_image, cv2.COLOR_BGR2RGB)
+        # cv2.imwrite(image_path, img_rgb)
 
     def camera_intrinsics_callback(self, msg):
         intrinsic_matrix = msg.k 
@@ -212,7 +207,7 @@ class VisionNode(Node):
                     raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
-                self.get_logger().info(f"{response.depth}")    
+                self.get_logger().info(f"{response.z}")    
                 response_transformed = self.transform_location(cam_x, cam_y, cam_z)
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
