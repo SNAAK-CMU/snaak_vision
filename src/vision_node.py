@@ -212,9 +212,11 @@ class VisionNode(Node):
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
-                if response.x < 0 or response.x >= self.depth_image.shape[1] or \
-                response.y < 0 or response.y >= self.depth_image.shape[0]:
+                if cam_x < 0 or cam_x >= self.depth_image.shape[1] or \
+                cam_y < 0 or cam_y >= self.depth_image.shape[0]:
                     raise ValueError("Coordinates out of bounds")
+                
+                self.get_logger().info("getting depth")
 
                 # Retrieve depth value at (x, y)
                 cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
@@ -222,7 +224,9 @@ class VisionNode(Node):
                     raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
-                self.get_logger().info(f"{response.z}")    
+                self.get_logger().info("transforming coordinates")
+
+                self.get_logger().info(f"{cam_z}")    
                 response_transformed = self.transform_location(cam_x, cam_y, cam_z)
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
