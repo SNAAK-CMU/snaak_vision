@@ -6,9 +6,6 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
-import os
-import time
-import json
 import traceback
 
 
@@ -97,10 +94,6 @@ class VisionNode(Node):
     
     def rgb_callback(self, msg):
         self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-        # image_path = '/home/snaak/Documents/image_test/image.png'
-        # # print(self.rgb_image.shape)
-        # img_rgb = cv2.cvtColor(self.rgb_image, cv2.COLOR_BGR2RGB)
-        # cv2.imwrite(image_path, img_rgb)
 
     def camera_intrinsics_callback(self, msg):
         intrinsic_matrix = msg.k 
@@ -144,8 +137,6 @@ class VisionNode(Node):
         ]
         transform_matrices = {}
 
-        self.get_logger().info("here")
-
         for (frame_id, child_frame_id) in link_order:
             if (frame_id, child_frame_id) in self.transformations:
                 trans = self.transformations[(frame_id, child_frame_id)].transform
@@ -156,9 +147,10 @@ class VisionNode(Node):
                 T_local[:3, 3] = translation
                 transform_matrices[(frame_id, child_frame_id)] = T_local
         
-        self.get_logger().info("here1")
 
         T_link0_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
+
+        self.get_logger().info("Got transform, applying it to point...")
 
         distorted_point = np.array([[x, y]], dtype=np.float32)
         undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
@@ -169,6 +161,7 @@ class VisionNode(Node):
         z = depth
         point_cam = np.array([x, y, z, 1])
         point_base_link = T_link0_camera@point_cam
+        
         return point_base_link[:3]    
 
     def handle_pickup_point(self, request, response):
@@ -225,10 +218,13 @@ class VisionNode(Node):
                     raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
-                self.get_logger().info("transforming coordinates")
+                self.get_logger().info("transforming coordinates...")
 
                 self.get_logger().info(f"{cam_z}")    
                 response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+
+                self.get_logger().info("got transform, applying it to point...")
+
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
                 response.z = response_transformed[2]
