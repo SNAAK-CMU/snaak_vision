@@ -177,6 +177,9 @@ class VisionNode(Node):
 
         self.get_logger().info(f"{image.shape}")
 
+        self.get_logger().info(f"Bin ID: {bin_id}")
+        self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
+
         if bin_id == CHEESE_BIN_ID: 
             # Cheese
             try:
@@ -186,11 +189,23 @@ class VisionNode(Node):
                 # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
                 # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
                 # (response.x, response.y) = self.img_utils.get_contour_center(cont)
+                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+                mask = self.cheese_segment_generator.get_top_cheese_slice(image)
 
-                mask = self.cheese_segment_generator.get_top_cheese_slice(self.rgb_image)
-                binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(mask)))
-                binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
-                (cam_x, cam_y) = self.img_utils.get_contour_center(cont)
+                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+
+                y_coords, x_coords = np.where(mask == 1)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
+
+                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
+
+                cv2.imwrite("/home/user/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg", mask * 255)
+                cv2.imwrite("/home/user/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg", image)
+
+                # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(mask)))
+                # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
+                # (cam_x, cam_y) = self.img_utils.get_contour_center(cont)
 
                 # cam_x = 443
                 # cam_y = 224
