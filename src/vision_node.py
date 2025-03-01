@@ -9,6 +9,7 @@ from snaak_vision.srv import GetXYZFromImage
 import os
 import time
 import json
+import traceback
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -234,6 +235,7 @@ class VisionNode(Node):
 
             except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
+                self.get_logger().error(traceback.print_exc())
                 response.x = -1.0
                 response.y = -1.0
                 response.z = float('nan')
