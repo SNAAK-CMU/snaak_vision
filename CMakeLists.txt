@@ -18,7 +18,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 # Install Python scripts (nodes)
 install(
-  PROGRAMS src/vision_node.py
+  DIRECTORY src/
+  USE_SOURCE_PERMISSIONS
   DESTINATION lib/${PROJECT_NAME}
 )
 
