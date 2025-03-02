@@ -7,6 +7,8 @@ from cv_bridge import CvBridge
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
 import traceback
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -21,8 +23,8 @@ from cheese_segmentation.cheese_segment_generator import CheeseSegmentGenerator
 
 
 #Make these config
-CHEESE_BIN_ID = 1
-HAM_BIN_ID = 2
+HAM_BIN_ID = 1
+CHEESE_BIN_ID = 2
 BREAD_BIN_ID = 3
 
 
@@ -69,12 +71,28 @@ class VisionNode(Node):
         self.subscription_tf = self.create_subscription(TFMessage, '/tf', self.tf_listener_callback_tf, 10)
         self.subscription_intrinsics = self.create_subscription(CameraInfo, '/camera/camera/color/camera_info', self.camera_intrinsics_callback, 10) # TODO fix this
         self.subscription_tf_static = self.create_subscription(TFMessage,'/tf_static', self.tf_static_listener_callback_tf_static, qos_profile)
+
+        self.marker_pub = self.create_publisher(Marker, 'visualization_marker', 10)
         
         self.transformations = {}
         self.K = np.eye(3)
         self.distortion_coefficients = np.zeros((1, 5))
         self.width = 0
         self.height = 0
+
+        # for visualizing pickup point
+        self.marker = Marker()
+        self.marker.header.frame_id = 'panda_link0'  # Frame of reference (e.g., base_link)
+        self.marker.id = 0
+        self.marker.type = Marker.SPHERE  # Marker type is a sphere
+        self.marker.action = Marker.ADD
+        self.marker.scale.x = 0.1  # Size of the sphere
+        self.marker.scale.y = 0.1
+        self.marker.scale.z = 0.1
+        self.marker.color.a = 1.0  # Full opacity
+        self.marker.color.r = 1.0  # Red color
+        self.marker.color.g = 0.0
+        self.marker.color.b = 0.0
 
     def tf_listener_callback_tf(self, msg):
         """ Handle incoming transform messages. """
@@ -193,9 +211,10 @@ class VisionNode(Node):
                 cam_y = int(np.mean(y_coords))
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
-
-                cv2.imwrite("/home/user/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg", mask * 255)
-                cv2.imwrite("/home/user/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg", image)
+                
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg", mask * 255)
+                cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg", image)
 
                 # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(mask)))
                 # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
@@ -228,6 +247,19 @@ class VisionNode(Node):
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
                 response.z = response_transformed[2]
+
+                self.get_logger().info(f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}")
+
+                # publish point to topic
+                self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
+
+                # Get the current time and set it in the header
+                self.marker.header.stamp = self.get_clock().now().to_msg()
+
+                # Publish the marker
+                self.marker_pub.publish(self.marker)
+                self.get_logger().info('Published point to RViz')
+
 
             except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
