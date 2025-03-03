@@ -82,7 +82,7 @@ class VisionNode(Node):
 
         # for visualizing pickup point
         self.marker = Marker()
-        self.marker.header.frame_id = 'panda_link0'  # Frame of reference (e.g., base_link)
+        self.marker.header.frame_id = 'camera_color_optical_frame'  # Frame of reference (e.g., base_link)
         self.marker.id = 0
         self.marker.type = Marker.SPHERE  # Marker type is a sphere
         self.marker.action = Marker.ADD
@@ -144,11 +144,27 @@ class VisionNode(Node):
             response.depth = float('nan')
 
         return response
+    
+    def dehomogenize(self, point_h):
+        # Dehomogenize by dividing x, y, z by w
+        x, y, z, w = point_h
+        if w != 0:
+            return (x / w, y / w, z / w)
+        else:
+            raise ValueError("Homogeneous coordinate w cannot be zero")
 
     def transform_location(self, x, y, depth):
         '''
         Modified Version of code from handeye_calibration_ros2
         '''
+
+        # apply intrinsic transform:
+        point_img_frame = np.array([x, y, 1])
+        point_cam = np.linalg.inv(self.K)@point_img_frame
+        point_cam = depth * point_cam  # Scale the normalized point by depth (Z)
+        point_cam = np.concatenate([point_cam, np.array([1])])  # Homogenize the point
+
+        # apply extrinsic transform
         T = np.eye(4)
         link_order = [
             ('panda_link0','panda_hand'), ('panda_hand','camera_color_optical_frame'),
@@ -167,20 +183,21 @@ class VisionNode(Node):
         
 
         T_link0_camera = transform_matrices[('panda_link0', 'panda_hand')]@transform_matrices[('panda_hand', 'camera_color_optical_frame')]
-
-        self.get_logger().info("Got transform, applying it to point...")
-
-        distorted_point = np.array([[x, y]], dtype=np.float32)
-        undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
-        x_undistorted, y_undistorted = undistorted_point[0][0]
-
-        x = (x_undistorted - self.K[0, 2]) * depth / self.K[0, 0]
-        y = (y_undistorted - self.K[1, 2]) * depth / self.K[1, 1]
-        z = depth
-        point_cam = np.array([x, y, z, 1])
-        point_base_link = T_link0_camera@point_cam
         
-        return point_base_link[:3]    
+        self.get_logger().info("Got extrinsic transform, applying it to point...")
+
+        # distorted_point = np.array([[x, y]], dtype=np.float32)
+        # undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
+        # x_undistorted, y_undistorted = undistorted_point[0][0]
+        # x = (x_undistorted - self.K[0, 2]) * depth / self.K[0, 0]
+        # y = (y_undistorted - self.K[1, 2]) * depth / self.K[1, 1]
+
+        # point_base_link = np.linalg.inv(T_link0_camera)@point_cam
+        point_base_link = T_link0_camera@point_cam # why not inverse??????
+    
+        point_base_link = self.dehomogenize(point_base_link)
+        
+        return point_base_link
 
     def handle_pickup_point(self, request, response):
         bin_id = request.bin_id
@@ -196,11 +213,14 @@ class VisionNode(Node):
             # Cheese
             try:
                 # Get X, Y
+                # UNET
                 # mask = self.cheese_unet.detect_image(self.rgb_image)
                 # top_layer_mask = self.cheese_unet.get_top_layer(mask, [250, 106, 77]) #TODO make color a config
                 # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
                 # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
                 # (response.x, response.y) = self.img_utils.get_contour_center(cont)
+
+                # SAM
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
 
@@ -216,23 +236,21 @@ class VisionNode(Node):
                 cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg", mask * 255)
                 cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg", image)
 
-                # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(mask)))
-                # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
-                # (cam_x, cam_y) = self.img_utils.get_contour_center(cont)
-
-                # cam_x = 443
-                # cam_y = 224
+                # Middle of camera FOV
+                # cam_x = 424
+                # cam_y = 240
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
                 if cam_x < 0 or cam_x >= self.depth_image.shape[1] or \
                 cam_y < 0 or cam_y >= self.depth_image.shape[0]:
                     raise ValueError("Coordinates out of bounds")
-                
-                self.get_logger().info("getting depth")
 
                 # Retrieve depth value at (x, y)
                 cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+                cam_z += 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+                cam_x += 0.02 # the x is a little off - maybe the end effector description? 
+                self.get_logger().info(f"Got Depth at {cam_x}, {cam_y}: {cam_z}")
                 if cam_z == 0:
                     raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
