@@ -248,8 +248,11 @@ class VisionNode(Node):
 
                 # Retrieve depth value at (x, y)
                 cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+
+                # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
                 cam_z += 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-                cam_x += 0.02 # the x is a little off - maybe the end effector description? 
+                cam_x += 0.02 # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+
                 self.get_logger().info(f"Got Depth at {cam_x}, {cam_y}: {cam_z}")
                 if cam_z == 0:
                     raise Exception("Invalid Z")
