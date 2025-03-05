@@ -26,7 +26,7 @@ from cheese_segmentation.cheese_segment_generator import CheeseSegmentGenerator
 HAM_BIN_ID = 1
 CHEESE_BIN_ID = 2
 BREAD_BIN_ID = 3
-
+ASSEMBLY_ID = 4
 
 qos_profile = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
@@ -67,6 +67,9 @@ class VisionNode(Node):
 
         # Create the pickup point service server
         self.pickup_point_service = self.create_service(GetXYZFromImage, self.get_name()+'/get_pickup_point', self.handle_pickup_point)
+
+        # Create the place point service server
+        self.place_point_service = self.create_service(GetXYZFromImage, self.get_name()+'/get_place_point', self.handle_place_point)
 
         self.subscription_tf = self.create_subscription(TFMessage, '/tf', self.tf_listener_callback_tf, 10)
         self.subscription_intrinsics = self.create_subscription(CameraInfo, '/camera/camera/color/camera_info', self.camera_intrinsics_callback, 10) # TODO fix this
@@ -247,7 +250,7 @@ class VisionNode(Node):
                     raise ValueError("Coordinates out of bounds")
 
                 # Retrieve depth value at (x, y)
-                cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters
+                cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0  # Convert mm to meters 
 
                 # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
                 cam_z += 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
@@ -301,6 +304,45 @@ class VisionNode(Node):
             raise "Incorrect Bin ID"
         
         return response
+    
+    def handle_place_point(self, request, response):
+        location_id = request.bin_id
+        timestamp = request.timestamp #use this to sync
+        rgb_image = self.rgb_image
+        depth_image = self.depth_image
+
+        
+        # fixed values, replace with actual ones
+        cam_x = 424.0
+        cam_y = 240.0
+
+        # get depth
+        cam_z = float(self.depth_image[int(cam_y/2.0), int(cam_x/2.0)]) / 1000.0
+
+
+        # transform coordinates
+        response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+
+        self.get_logger().info("got transform, applying it to point...")
+
+        response.x = response_transformed[0]
+        response.y = response_transformed[1]
+        response.z = response_transformed[2]
+
+        self.get_logger().info(f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}")
+
+        # publish point to topic
+        self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
+
+        # Get the current time and set it in the header
+        self.marker.header.stamp = self.get_clock().now().to_msg()
+
+        # Publish the marker
+        self.marker_pub.publish(self.marker)
+        self.get_logger().info('Published point to RViz')
+
+        return response
+
 
 def main(args=None):
     rclpy.init(args=args)
