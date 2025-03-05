@@ -19,7 +19,7 @@ import cv2
 from scipy.spatial.transform import Rotation as R
 
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
-
+from segmentation.tray_segment_generator import TraySegmentGenerator
 
 #Make these config
 HAM_BIN_ID = 1
@@ -38,8 +38,9 @@ class VisionNode(Node):
         self.depth_image = None
         self.rgb_image = None
 
-        # init cheese segmentation object
+        # init segmentation objects
         self.cheese_segment_generator = CheeseSegmentGenerator()
+        self.tray_segment_generator = TraySegmentGenerator()
 
         # Subscribe to depth image topic (adjust topic name as needed)
         self.depth_subscription = self.create_subscription(
@@ -299,7 +300,18 @@ class VisionNode(Node):
         rgb_image = self.rgb_image
         depth_image = self.depth_image
 
-        
+        if location_id == ASSEMBLY_TRAY_ID:
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            mask = self.tray_segment_generator.get_tray_mask(image)
+
+            # Average the positions of white points to get center
+            y_coords, x_coords = np.where(mask == 1)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
+
+        if location_id == ASSEMBLY_BREAD_ID:    
+            pass
+
         # fixed values, replace with actual ones
         cam_x = 424.0
         cam_y = 240.0
