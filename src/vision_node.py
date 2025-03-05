@@ -289,6 +289,17 @@ class VisionNode(Node):
                 response.y = -1.0
                 response.z = float('nan')
         
+        elif bin_id == HAM_BIN_ID:
+            #TODO
+            pass
+            
+        elif bin_id == BREAD_BIN_ID:
+            #TODO
+            pass
+            
+        else:
+            raise "Incorrect Bin ID"
+        
         return response
 
 def main(args=None):
