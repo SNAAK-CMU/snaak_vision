@@ -25,7 +25,8 @@ from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 HAM_BIN_ID = 1
 CHEESE_BIN_ID = 2
 BREAD_BIN_ID = 3
-ASSEMBLY_ID = 4
+ASSEMBLY_TRAY_ID = 4
+ASSEMBLY_BREAD_ID = 5
 
 qos_profile = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
