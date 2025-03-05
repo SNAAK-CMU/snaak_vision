@@ -18,7 +18,7 @@ from sensor_msgs.msg import CameraInfo
 import cv2
 from scipy.spatial.transform import Rotation as R
 
-from cheese_segmentation.cheese_segment_generator import CheeseSegmentGenerator
+from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 
 
 #Make these config
