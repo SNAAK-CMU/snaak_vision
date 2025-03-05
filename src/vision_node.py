@@ -12,7 +12,6 @@ from geometry_msgs.msg import Point
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
-from post_processing.image_utlis import ImageUtils
 from tf2_msgs.msg import TFMessage
 import numpy as np
 from sensor_msgs.msg import CameraInfo
@@ -37,12 +36,6 @@ class VisionNode(Node):
         self.bridge = CvBridge()
         self.depth_image = None
         self.rgb_image = None
-
-        # Start UNet 
-        # self.cheese_unet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/top_and_other/best_epoch_weights.pth") #TODO make these config 
-
-        # post processing stuff
-        self.img_utils = ImageUtils()
 
         # init cheese segmentation object
         self.cheese_segment_generator = CheeseSegmentGenerator()
@@ -212,26 +205,20 @@ class VisionNode(Node):
         if bin_id == CHEESE_BIN_ID: 
             # Cheese
             try:
-                # Get X, Y
-                # UNET
-                # mask = self.cheese_unet.detect_image(self.rgb_image)
-                # top_layer_mask = self.cheese_unet.get_top_layer(mask, [250, 106, 77]) #TODO make color a config
-                # binary_mask = Image.fromarray(self.img_utils.binarize_image(masked_img=np.array(top_layer_mask)))
-                # binary_mask_edges, cont = self.img_utils.find_edges_in_binary_image(np.array(binary_mask))
-                # (response.x, response.y) = self.img_utils.get_contour_center(cont)
-
-                # SAM
+                # Get X, Y using SAM
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
 
                 self.get_logger().info(f"Max value in mask {np.max(mask)}")
 
+                # Average the positions of white points to get center
                 y_coords, x_coords = np.where(mask == 1)
                 cam_x = int(np.mean(x_coords))
                 cam_y = int(np.mean(y_coords))
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 
+                # Save images for debugging
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg", mask * 255)
                 cv2.imwrite("/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg", image)
