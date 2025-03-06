@@ -20,6 +20,7 @@ from scipy.spatial.transform import Rotation as R
 
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
+from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
 # Make these config
@@ -42,6 +43,7 @@ class VisionNode(Node):
         # init segmentation objects
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
+        self.bread_segment_generator = BreadSegmentGenerator()
 
         # init control variables
         self.is_first_assembly_bread = True
@@ -367,14 +369,14 @@ class VisionNode(Node):
     def handle_place_point(self, request, response):
         location_id = request.bin_id
         timestamp = request.timestamp  # use this to sync
-        rgb_image = self.rgb_image
         depth_image = self.depth_image
+        
+        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
         if location_id == ASSEMBLY_TRAY_ID:
-            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             mask = self.tray_segment_generator.get_tray_mask(image)
 
-            self.assembly_tray_box = calc_bbox_from_mask(mask)
+            self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
 
             # Average the positions of white points to get center
             y_coords, x_coords = np.where(mask == 1)
@@ -383,12 +385,12 @@ class VisionNode(Node):
 
         if location_id == ASSEMBLY_BREAD_ID:
             if self.is_first_assembly_bread:
-                self.is_first_assembly_bread = False
-                # TODO: Segment bread
-                # fixed values, replace with actual ones
-                cam_x = 424.0
-                cam_y = 240.0
-                pass
+                mask = self.bread_segment_generator.get_bread_mask(image, self.assembly_tray_box)
+                
+                # Average the positions of white points to get center
+                y_coords, x_coords = np.where(mask == 1)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
             else:
                 # Use previously calculated point
                 response.x, response.y, response.z = self.assembly_bread_xyz_base
@@ -422,6 +424,11 @@ class VisionNode(Node):
         self.get_logger().info(
             f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
         )
+
+        # Remember the bread location for future ingredients
+        if location_id == ASSEMBLY_BREAD_ID and self.is_first_assembly_bread:
+            self.assembly_bread_xyz_base = (response.x, response.y, response.z)
+            self.is_first_assembly_bread = False
 
         # publish point to topic
         self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
