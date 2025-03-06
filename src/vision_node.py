@@ -35,7 +35,7 @@ qos_profile = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
 class VisionNode(Node):
     def __init__(self):
-        super().__init__("vision_node")
+        super().__init__("snaak_vision")
         self.bridge = CvBridge()
         self.depth_image = None
         self.rgb_image = None
@@ -108,7 +108,7 @@ class VisionNode(Node):
         # for visualizing pickup point
         self.marker = Marker()
         self.marker.header.frame_id = (
-            "camera_color_optical_frame"  # Frame of reference (e.g., base_link)
+            "panda_link0"  # Frame of reference (e.g., base_link)
         )
         self.marker.id = 0
         self.marker.type = Marker.SPHERE  # Marker type is a sphere
@@ -255,7 +255,7 @@ class VisionNode(Node):
         return point_base_link
 
     def handle_pickup_point(self, request, response):
-        bin_id = request.bin_id
+        bin_id = request.location_id
         timestamp = request.timestamp  # use this to sync
         image = self.rgb_image
 
@@ -283,11 +283,11 @@ class VisionNode(Node):
                 # Save images for debugging
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
-                    "/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/mask.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask * 255,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/vision_ws/src/vision_node/src/cheese_segmentation/img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
                     image,
                 )
 
@@ -311,7 +311,7 @@ class VisionNode(Node):
                 )  # Convert mm to meters
 
                 # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-                cam_z += 0.03  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+                cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
                 cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
                 self.get_logger().info(f"Got Depth at {cam_x}, {cam_y}: {cam_z}")
@@ -367,13 +367,18 @@ class VisionNode(Node):
         return response
 
     def handle_place_point(self, request, response):
-        location_id = request.bin_id
+        location_id = request.location_id
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
         
         image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
+        self.get_logger().info(f"Handle Place Point Called with location ID: {location_id}")
+        self.get_logger().info(f"Tray ID: {ASSEMBLY_TRAY_ID}, Bread ID: {ASSEMBLY_BREAD_ID}")
+
         if location_id == ASSEMBLY_TRAY_ID:
+            self.get_logger().info(f"Segmenting tray")
+            
             mask = self.tray_segment_generator.get_tray_mask(image)
 
             self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
@@ -383,15 +388,40 @@ class VisionNode(Node):
             cam_x = int(np.mean(x_coords))
             cam_y = int(np.mean(y_coords))
 
+            # Save images for debugging
+            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_mask.jpg",
+                mask * 255,
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_img.jpg",
+                image,
+            )
+
         if location_id == ASSEMBLY_BREAD_ID:
+            self.get_logger().info(f"Segmenting Bread")
             if self.is_first_assembly_bread:
+                self.get_logger().info(f"First time segmenting bread...")
                 mask = self.bread_segment_generator.get_bread_mask(image, self.assembly_tray_box)
-                
+                self.get_logger().info(f"Bread segmentation completed")
                 # Average the positions of white points to get center
                 y_coords, x_coords = np.where(mask == 1)
                 cam_x = int(np.mean(x_coords))
                 cam_y = int(np.mean(y_coords))
+
+                # Save images for debugging
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                    mask * 255,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    image,
+                )
             else:
+                self.get_logger().info(f"Using previous bread estimate")
                 # Use previously calculated point
                 response.x, response.y, response.z = self.assembly_bread_xyz_base
                 self.get_logger().info(
