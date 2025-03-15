@@ -192,7 +192,7 @@ rqt-shell==1.0.2
 rqt-srv==1.0.3
 rqt-topic==1.5.0
 # Editable install with no version control (SAM-2==1.0)
--e /home/snaak/Documents/manipulation_ws/src/sam2
+-e ~/Documents/snaak_ws/src/sam2
 scipy==1.15.2
 scripts==0.0.1
 sensor-msgs==4.2.4
