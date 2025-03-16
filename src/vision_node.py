@@ -156,38 +156,35 @@ class VisionNode(Node):
     def quaternion_to_rotation_matrix(self, x, y, z, w):
         """Convert a quaternion into a full three-dimensional rotation matrix."""
         return R.from_quat([x, y, z, w]).as_matrix()
-
-    def handle_get_depth(
-        self, request, response
-    ):  # separate this from service callback stuff so the same function can be used for pickup point service
+    
+    def get_depth(self, x, y):
         if self.depth_image is None:
             self.get_logger().warn("Depth image not available yet!")
-            response.depth = float("nan")
-            return response
+            return float("nan")
 
         try:
             # Ensure coordinates are within bounds of the image dimensions
             if (
-                request.x < 0
-                or request.x >= self.depth_image.shape[1]
-                or request.y < 0
-                or request.y >= self.depth_image.shape[0]
+                x < 0
+                or x >= self.depth_image.shape[1]
+                or y < 0
+                or y >= self.depth_image.shape[0]
             ):
                 raise ValueError("Coordinates out of bounds")
 
             # Retrieve depth value at (x, y)
-            self.get_logger().info(
-                f"Getting Depth at ({request.x}, {request.y})"
-            )
-            response.depth = (
-                float(self.depth_image[request.y, request.x]) / 1000.0
-            )  # Convert mm to meters
-            self.get_logger().info(
-                f"Depth at ({request.x}, {request.y}): {response.depth} meters"
-            )
+            self.get_logger().info(f"Getting Depth at ({x}, {y})")
+            depth = float(self.depth_image[y, x]) / 1000.0  # Convert mm to meters
+            self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
+            return depth
         except Exception as e:
             self.get_logger().error(f"Error retrieving depth: {e}")
-            response.depth = float("nan")
+            return float("nan")
+
+    def handle_get_depth(self, request, response):  
+        x = request.x
+        y = request.y
+        response.depth = self.get_depth(x, y)
 
         return response
 
@@ -242,7 +239,7 @@ class VisionNode(Node):
             @ transform_matrices[("panda_hand", "camera_color_optical_frame")]
         )
 
-        self.get_logger().info("Got extrinsic transform, applying it to pdepth_imageoint...")
+        self.get_logger().info("Got extrinsic transform, applying it to the point")
 
         # distorted_point = np.array([[x, y]], dtype=np.float32)
         # undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
@@ -309,11 +306,7 @@ class VisionNode(Node):
                     raise ValueError("Coordinates out of bounds")
 
                 # Retrieve depth value at (x, y)
-                self.get_logger().info(
-                f"Querying Depth Image at ({int(cam_y / 2.0)}, {int(cam_x / 2.0)})")
-                cam_z = (float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0)  # Convert mm to meters
-
-                self.get_logger().info(f"Depth at point {cam_x}, {cam_y} in RGB Image: {cam_z}")
+                cam_z = self.get_depth(cam_x, cam_y)
 
                 # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
                 cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
@@ -324,8 +317,6 @@ class VisionNode(Node):
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
                 self.get_logger().info("transforming coordinates...")
-
-                self.get_logger().info(f"{cam_z}")
                 response_transformed = self.transform_location(cam_x, cam_y, cam_z)
 
                 self.get_logger().info("got transform, applying it to point...")
