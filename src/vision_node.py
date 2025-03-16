@@ -176,6 +176,9 @@ class VisionNode(Node):
                 raise ValueError("Coordinates out of bounds")
 
             # Retrieve depth value at (x, y)
+            self.get_logger().info(
+                f"Getting Depth at ({request.x}, {request.y})"
+            )
             response.depth = (
                 float(self.depth_image[request.y, request.x]) / 1000.0
             )  # Convert mm to meters
@@ -239,7 +242,7 @@ class VisionNode(Node):
             @ transform_matrices[("panda_hand", "camera_color_optical_frame")]
         )
 
-        self.get_logger().info("Got extrinsic transform, applying it to point...")
+        self.get_logger().info("Got extrinsic transform, applying it to pdepth_imageoint...")
 
         # distorted_point = np.array([[x, y]], dtype=np.float32)
         # undistorted_point = cv2.undistortPoints(distorted_point, self.K, self.distortion_coefficients)
@@ -293,7 +296,7 @@ class VisionNode(Node):
 
                 # Middle of camera FOV
                 # cam_x = 424
-                # cam_y = 240
+                # cam_y = 240depth_image
 
                 # Get Z
                 # Ensure coordinates are within bounds of the image dimensions
@@ -306,15 +309,16 @@ class VisionNode(Node):
                     raise ValueError("Coordinates out of bounds")
 
                 # Retrieve depth value at (x, y)
-                cam_z = (
-                    float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
-                )  # Convert mm to meters
+                self.get_logger().info(
+                f"Querying Depth Image at ({int(cam_y / 2.0)}, {int(cam_x / 2.0)})")
+                cam_z = (float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0)  # Convert mm to meters
+
+                self.get_logger().info(f"Depth at point {cam_x}, {cam_y} in RGB Image: {cam_z}")
 
                 # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
                 cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
                 cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
-                self.get_logger().info(f"Got Depth at {cam_x}, {cam_y}: {cam_z}")
                 if cam_z == 0:
                     raise Exception("Invalid Z")
                 # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
