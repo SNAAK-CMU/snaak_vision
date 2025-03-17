@@ -398,7 +398,7 @@ class VisionNode(Node):
             self.get_logger().info(f"Segmenting Bread")
             if self.is_first_assembly_bread:
                 self.get_logger().info(f"First time segmenting bread...")
-                mask = self.bread_segment_generator.get_bread_mask(image, self.assembly_tray_box)
+                mask = self.bread_segment_generator.get_bread_mask(image)
                 self.get_logger().info(f"Bread segmentation completed")
                 # Average the positions of white points to get center
                 y_coords, x_coords = np.where(mask == 1)

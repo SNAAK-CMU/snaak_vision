@@ -12,11 +12,13 @@ from segmentation.segment_utils import convert_mask_to_orig_dims
 
 
 BREAD_AREA_GT = 11500
+TRAY_BOX_PIX = (295, 103, 530, 280)
 
 
 class BreadSegmentGenerator:
 
     AREA_GT = BREAD_AREA_GT
+    TRAY_BOX_PIX = TRAY_BOX_PIX
 
     def __init__(self):
         # TODO: Change paths according deployment environment
@@ -76,13 +78,13 @@ class BreadSegmentGenerator:
 
         return selected_mask
 
-    def get_bread_mask(self, image, tray_box_pix):
+    def get_bread_mask(self, image):
         """
         Called from the vision node during ingredient placement.
         Returns the segmentation mask for the base bread slice in assembly area.
         """
         # Crop out tray region
-        crop_xmin, crop_ymin, crop_xmax, crop_ymax = tray_box_pix
+        crop_xmin, crop_ymin, crop_xmax, crop_ymax = self.TRAY_BOX_PIX
         cropped_image = image[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
 
         masks = self.mask_generator.generate(cropped_image)
