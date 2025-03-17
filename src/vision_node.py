@@ -21,6 +21,7 @@ from scipy.spatial.transform import Rotation as R
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
+from segmentation.meat_segment_generator import MeatSegmentGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
 # Make these config
@@ -44,6 +45,7 @@ class VisionNode(Node):
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
+        self.meat_segment_generator = MeatSegmentGenerator()
 
         # init control variables
         self.is_first_assembly_bread = True
@@ -90,25 +92,28 @@ class VisionNode(Node):
             self.camera_intrinsics_callback,
             10,
         )  # TODO fix this
+        
         self.subscription_tf_static = self.create_subscription(
             TFMessage,
             "/tf_static",
             self.tf_static_listener_callback_tf_static,
             qos_profile,
         )
-
-        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
-
+        
+        # Initialize image and transformation variables
         self.transformations = {}
         self.K = np.eye(3)
         self.distortion_coefficients = np.zeros((1, 5))
         self.width = 0
         self.height = 0
 
+        # To publish pickup point to RViz
+        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
+
         # for visualizing pickup point
         self.marker = Marker()
         self.marker.header.frame_id = (
-            "panda_link0"  # Frame of reference (e.g., base_link)
+            "panda_link0"  # Frame of reference - base link of the robot arm
         )
         self.marker.id = 0
         self.marker.type = Marker.SPHERE  # Marker type is a sphere
@@ -263,101 +268,97 @@ class VisionNode(Node):
 
         self.get_logger().info(f"Bin ID: {bin_id}")
         self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
-
-        if bin_id == CHEESE_BIN_ID:
-            # Cheese
-            try:
+        
+        try:
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            
+            if bin_id == CHEESE_BIN_ID:
+                # Cheese
                 # Get X, Y using SAM
-                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                
+            elif bin_id == HAM_BIN_ID:
+                # Ham
+                # Get X, Y using SAM
+                mask = self.meat_segment_generator.get_top_meat_slice(image)
+                pass
 
-                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+            elif bin_id == BREAD_BIN_ID:
+                # TODO
+                pass
 
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+            else:
+                raise "Incorrect Bin ID"
+            
+            self.get_logger().info(f"Max value in mask {np.max(mask)}")
 
-                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
+            # Average the positions of white points to get center
+            y_coords, x_coords = np.where(mask == 1)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
 
-                # Save images for debugging
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
-                    mask * 255,
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
-                    image,
-                )
+            self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
 
-                # Middle of camera FOV
-                # cam_x = 424
-                # cam_y = 240depth_image
+            # Save images for debugging
+            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
+                mask * 255,
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
+                image,
+            )
+            if (
+                cam_x < 0
+                or cam_x >= self.depth_image.shape[1]
+                or cam_y < 0
+                or cam_y >= self.depth_image.shape[0]
+            ):
+                raise ValueError("Coordinates out of bounds")
+            
+            # Retrieve depth value at (x, y)
+            cam_z = self.get_depth(cam_x, cam_y)
 
-                # Get Z
-                # Ensure coordinates are within bounds of the image dimensions
-                if (
-                    cam_x < 0
-                    or cam_x >= self.depth_image.shape[1]
-                    or cam_y < 0
-                    or cam_y >= self.depth_image.shape[0]
-                ):
-                    raise ValueError("Coordinates out of bounds")
+            # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
+            cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+            cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
-                # Retrieve depth value at (x, y)
-                cam_z = self.get_depth(cam_x, cam_y)
+            if cam_z == 0:
+                raise Exception("Invalid Z")
+            # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
-                # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-                cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-                cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+            self.get_logger().info("transforming coordinates...")
+            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
 
-                if cam_z == 0:
-                    raise Exception("Invalid Z")
-                # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
+            self.get_logger().info("got transform, applying it to point...")
 
-                self.get_logger().info("transforming coordinates...")
-                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+            response.x = response_transformed[0]
+            response.y = response_transformed[1]
+            response.z = response_transformed[2]
 
-                self.get_logger().info("got transform, applying it to point...")
+            self.get_logger().info(
+                f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+            )
 
-                response.x = response_transformed[0]
-                response.y = response_transformed[1]
-                response.z = response_transformed[2]
+            # publish point to topic
+            self.marker.pose.position = Point(
+                x=response.x, y=response.y, z=response.z
+            )
 
-                self.get_logger().info(
-                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-                )
+            # Get the current time and set it in the header
+            self.marker.header.stamp = self.get_clock().now().to_msg()
 
-                # publish point to topic
-                self.marker.pose.position = Point(
-                    x=response.x, y=response.y, z=response.z
-                )
+            # Publish the marker
+            self.marker_pub.publish(self.marker)
+            self.get_logger().info("Published point to RViz")
 
-                # Get the current time and set it in the header
-                self.marker.header.stamp = self.get_clock().now().to_msg()
-
-                # Publish the marker
-                self.marker_pub.publish(self.marker)
-                self.get_logger().info("Published point to RViz")
-
-            except Exception as e:
-                self.get_logger().error(f"Error while calculating pickup point: {e}")
-                self.get_logger().error(traceback.print_exc())
-                response.x = -1.0
-                response.y = -1.0
-                response.z = float("nan")
-
-        elif bin_id == HAM_BIN_ID:
-            # TODO
-            pass
-
-        elif bin_id == BREAD_BIN_ID:
-            # TODO
-            pass
-
-        else:
-            raise "Incorrect Bin ID"
+        except Exception as e:
+            self.get_logger().error(f"Error while calculating pickup point: {e}")
+            self.get_logger().error(traceback.print_exc())
+            response.x = -1.0
+            response.y = -1.0
+            response.z = float("nan")
 
         return response
 
