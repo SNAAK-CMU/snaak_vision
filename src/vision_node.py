@@ -21,6 +21,7 @@ from scipy.spatial.transform import Rotation as R
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
+from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
@@ -45,6 +46,7 @@ class VisionNode(Node):
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
+        self.plate_bread_segment_generator = PlateBreadSegementGenerator()        
         self.meat_segment_generator = MeatSegmentGenerator()
 
         # init control variables
@@ -202,7 +204,7 @@ class VisionNode(Node):
             raise ValueError("Homogeneous coordinate w cannot be zero")
 
     def transform_location(self, x, y, depth):
-        """
+        """   
         Modified Version of code from handeye_calibration_ros2
         """
 
@@ -257,8 +259,8 @@ class VisionNode(Node):
 
         point_base_link = self.dehomogenize(point_base_link)
 
-        return point_base_link
-
+        return point_base_link      
+            
     def handle_pickup_point(self, request, response):
         bin_id = request.location_id
         timestamp = request.timestamp  # use this to sync
@@ -276,17 +278,20 @@ class VisionNode(Node):
                 # Cheese
                 # Get X, Y using SAM
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 
             elif bin_id == HAM_BIN_ID:
                 # Ham
                 # Get X, Y using SAM
                 mask = self.meat_segment_generator.get_top_meat_slice(image)
-                pass
-
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+            
             elif bin_id == BREAD_BIN_ID:
-                # TODO
-                pass
-
+                # Bread
+                cam_x, cam_y, lower_y = self.plate_bread_segment_generator.get_bread_pickup_point(image)
+                cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
+                cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
+                
             else:
                 raise "Incorrect Bin ID"
             
@@ -300,7 +305,6 @@ class VisionNode(Node):
             self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
 
             # Save images for debugging
-            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                 mask * 255,
@@ -359,7 +363,7 @@ class VisionNode(Node):
             response.x = -1.0
             response.y = -1.0
             response.z = float("nan")
-
+            
         return response
 
     def handle_place_point(self, request, response):
@@ -399,7 +403,7 @@ class VisionNode(Node):
             self.get_logger().info(f"Segmenting Bread")
             if self.is_first_assembly_bread:
                 self.get_logger().info(f"First time segmenting bread...")
-                mask = self.bread_segment_generator.get_bread_mask(image, self.assembly_tray_box)
+                mask = self.bread_segment_generator.get_bread_mask(image)
                 self.get_logger().info(f"Bread segmentation completed")
                 # Average the positions of white points to get center
                 y_coords, x_coords = np.where(mask == 1)
