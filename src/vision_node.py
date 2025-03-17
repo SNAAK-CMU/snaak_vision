@@ -21,6 +21,7 @@ from scipy.spatial.transform import Rotation as R
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
+from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
 # Make these config
@@ -44,7 +45,7 @@ class VisionNode(Node):
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
-
+        self.plate_bread_segment_generator = PlateBreadSegementGenerator()
         # init control variables
         self.is_first_assembly_bread = True
         self.assembly_tray_box = None
@@ -197,7 +198,7 @@ class VisionNode(Node):
             raise ValueError("Homogeneous coordinate w cannot be zero")
 
     def transform_location(self, x, y, depth):
-        """
+        """   
         Modified Version of code from handeye_calibration_ros2
         """
 
@@ -252,8 +253,8 @@ class VisionNode(Node):
 
         point_base_link = self.dehomogenize(point_base_link)
 
-        return point_base_link
-
+        return point_base_link      
+            
     def handle_pickup_point(self, request, response):
         bin_id = request.location_id
         timestamp = request.timestamp  # use this to sync
@@ -353,9 +354,46 @@ class VisionNode(Node):
             pass
 
         elif bin_id == BREAD_BIN_ID:
-            # TODO
-            pass
+            # TODO: test
+            try:
+                cam_x, cam_y, lower_y = self.plate_bread_segment_generator.get_bread_pickup_point(image)
+                cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
+                cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
 
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_bin_img.jpg",
+                    image,
+                )
+                cam_z = self.get_depth(cam_x, cam_y)
+                if cam_z == 0:
+                    raise Exception("Invalid Z")
+                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+                bottom_transformed = self.transform_location(cam_x, lower_y, cam_z)
+                self.get_logger().info(f"{np.abs(response_transformed[1] - bottom_transformed[1])}")
+                if np.abs(response_transformed[1] - bottom_transformed[1]) < 0.025:
+                    raise Exception("Not enough room to pick up bread")
+                response.x = response_transformed[0]
+                response.y = response_transformed[1]
+                response.z = response_transformed[2]
+                self.get_logger().info(
+                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+                )
+                self.marker.pose.position = Point(
+                    x=response.x, y=response.y, z=response.z
+                )
+
+                # Get the current time and set it in the header
+                self.marker.header.stamp = self.get_clock().now().to_msg()
+
+                # Publish the marker
+                self.marker_pub.publish(self.marker)
+                self.get_logger().info("Published point to RViz")
+            except Exception as e:
+                self.get_logger().error(f"Error while calculating pickup point: {e}")
+                self.get_logger().error(traceback.print_exc())
+                response.x = -1.0
+                response.y = -1.0
+                response.z = float("nan")
         else:
             raise "Incorrect Bin ID"
 
