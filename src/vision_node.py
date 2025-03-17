@@ -21,6 +21,7 @@ from scipy.spatial.transform import Rotation as R
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
+from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
 # Make these config
@@ -44,7 +45,7 @@ class VisionNode(Node):
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
-
+        self.plate_bread_segment_generator = PlateBreadSegementGenerator()
         # init control variables
         self.is_first_assembly_bread = True
         self.assembly_tray_box = None
@@ -197,7 +198,7 @@ class VisionNode(Node):
             raise ValueError("Homogeneous coordinate w cannot be zero")
 
     def transform_location(self, x, y, depth):
-        """
+        """   
         Modified Version of code from handeye_calibration_ros2
         """
 
@@ -252,46 +253,7 @@ class VisionNode(Node):
 
         point_base_link = self.dehomogenize(point_base_link)
 
-        return point_base_link
-    
-    def get_bread_pickup_point(self, image):
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV) 
-        lower_blue = np.array([100,50,50]) 
-        upper_blue = np.array([140,255,255]) 
-        mask = cv2.inRange(hsv, lower_blue, upper_blue) 
-        res = cv2.bitwise_and(image,image, mask= mask) 
-        gray = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
-        ret,thresh = cv2.threshold(gray,10,255,0)
-        min_area = 2500
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-        for cnt in contours:
-            if cv2.contourArea(cnt) > min_area:
-                approx = cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True)
-                M = cv2.moments(cnt)
-                # m00: Total area of the contour.
-                # m10: Sum of the x-coordinates weighted by pixel intensities.
-                # m01: Sum of the y-coordinates weighted by pixel intensities.
-                # centroid is given by m10 / m00
-                cX = int(M["m10"] / M["m00"]) 
-                cY = int(M["m01"] / M["m00"])
-                cv2.drawContours(image, [approx], -1, (0, 255, 0), 3) 
-                cv2.circle(image, (cX, cY), 5, (255, 0, 255), -1)
-                max_y_idx = np.argmax(cnt[:, 0, 1])
-                cv2.circle(image, (cX, cnt[max_y_idx, 0, 1]), 5, (0, 255, 255), -1)
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                    image,
-                )
-                cZ = self.get_depth(cX, cY)
-                if cZ == 0:
-                    raise Exception("Invalid Z")
-                center_transformed = self.transform_location(cX, cY, cZ)
-                bottom_transformed = self.transform_location(cX, cnt[max_y_idx, 0, 1])
-                if np.abs(center_transformed[1] - bottom_transformed[1]) > 0.03:
-                    return center_transformed
-                
-        raise Exception("No suitable bread pickup point found")
-        
+        return point_base_link      
             
     def handle_pickup_point(self, request, response):
         bin_id = request.location_id
@@ -394,7 +356,22 @@ class VisionNode(Node):
         elif bin_id == BREAD_BIN_ID:
             # TODO: test
             try:
-                response_transformed = self.get_bread_pickup_point(image)
+                cam_x, cam_y, lower_y = self.plate_bread_segment_generator.get_bread_pickup_point(image)
+                cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
+                cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
+
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_bin_img.jpg",
+                    image,
+                )
+                cam_z = self.get_depth(cam_x, cam_y)
+                if cam_z == 0:
+                    raise Exception("Invalid Z")
+                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+                bottom_transformed = self.transform_location(cam_x, lower_y, cam_z)
+                self.get_logger().info(f"{np.abs(response_transformed[1] - bottom_transformed[1])}")
+                if np.abs(response_transformed[1] - bottom_transformed[1]) < 0.025:
+                    raise Exception("Not enough room to pick up bread")
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
                 response.z = response_transformed[2]
