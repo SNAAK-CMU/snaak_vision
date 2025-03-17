@@ -253,7 +253,46 @@ class VisionNode(Node):
         point_base_link = self.dehomogenize(point_base_link)
 
         return point_base_link
-
+    
+    def get_bread_pickup_point(self, image):
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV) 
+        lower_blue = np.array([100,50,50]) 
+        upper_blue = np.array([140,255,255]) 
+        mask = cv2.inRange(hsv, lower_blue, upper_blue) 
+        res = cv2.bitwise_and(image,image, mask= mask) 
+        gray = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
+        ret,thresh = cv2.threshold(gray,10,255,0)
+        min_area = 2500
+        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contours:
+            if cv2.contourArea(cnt) > min_area:
+                approx = cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True)
+                M = cv2.moments(cnt)
+                # m00: Total area of the contour.
+                # m10: Sum of the x-coordinates weighted by pixel intensities.
+                # m01: Sum of the y-coordinates weighted by pixel intensities.
+                # centroid is given by m10 / m00
+                cX = int(M["m10"] / M["m00"]) 
+                cY = int(M["m01"] / M["m00"])
+                cv2.drawContours(image, [approx], -1, (0, 255, 0), 3) 
+                cv2.circle(image, (cX, cY), 5, (255, 0, 255), -1)
+                max_y_idx = np.argmax(cnt[:, 0, 1])
+                cv2.circle(image, (cX, cnt[max_y_idx, 0, 1]), 5, (0, 255, 255), -1)
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                    image,
+                )
+                cZ = self.get_depth(cX, cY)
+                if cZ == 0:
+                    raise Exception("Invalid Z")
+                center_transformed = self.transform_location(cX, cY, cZ)
+                bottom_transformed = self.transform_location(cX, cnt[max_y_idx, 0, 1])
+                if np.abs(center_transformed[1] - bottom_transformed[1]) > 0.03:
+                    return center_transformed
+                
+        raise Exception("No suitable bread pickup point found")
+        
+            
     def handle_pickup_point(self, request, response):
         bin_id = request.location_id
         timestamp = request.timestamp  # use this to sync
@@ -353,9 +392,31 @@ class VisionNode(Node):
             pass
 
         elif bin_id == BREAD_BIN_ID:
-            # TODO
-            pass
+            # TODO: test
+            try:
+                response_transformed = self.get_bread_pickup_point(image)
+                response.x = response_transformed[0]
+                response.y = response_transformed[1]
+                response.z = response_transformed[2]
+                self.get_logger().info(
+                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+                )
+                self.marker.pose.position = Point(
+                    x=response.x, y=response.y, z=response.z
+                )
 
+                # Get the current time and set it in the header
+                self.marker.header.stamp = self.get_clock().now().to_msg()
+
+                # Publish the marker
+                self.marker_pub.publish(self.marker)
+                self.get_logger().info("Published point to RViz")
+            except Exception as e:
+                self.get_logger().error(f"Error while calculating pickup point: {e}")
+                self.get_logger().error(traceback.print_exc())
+                response.x = -1.0
+                response.y = -1.0
+                response.z = float("nan")
         else:
             raise "Incorrect Bin ID"
 
