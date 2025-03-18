@@ -39,7 +39,7 @@ class MeatSegmentGenerator():
         self.__create_sam_predictor()
         
         # Set up
-        self.got_first_img = False
+        self.got_first_img = Falseimage
         self.lower_hsv = None
         self.upper_hsv = None
         
@@ -72,9 +72,11 @@ class MeatSegmentGenerator():
         cropped_image = image[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
         
         # Construct bounding box prompt using HSV mask
-        mask = segment_from_hsv(image, self.lower_hsv, self.upper_hsv)
+        mask = segment_from_hsv(cropped_image, self.lower_hsv, self.upper_hsv)
         kernel = np.ones((5, 5), np.uint8)  # 5x5 kernel
         mask = cv2.erode(mask, kernel, iterations=1)
+
+        # cv2.imwrite("/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_hsv_mask.jpg", mask)
 
         bounding_box = calc_bbox_from_mask(mask)
         meat_right_x,  meat_top_y, meat_left_x, meat_bottom_y = bounding_box
@@ -88,7 +90,7 @@ class MeatSegmentGenerator():
         point_labels = np.array([0, 0, 0, 0])  # All are negative prompts
         
         # Predict mask using SAM2
-        self.predictor.set_image(cropped_image)
+        self.predictor.set_image(cropped_image)image
         masks, scores, logits = self.predictor.predict(
             point_coords=negative_points, 
             point_labels=point_labels,
@@ -110,6 +112,8 @@ class MeatSegmentGenerator():
         # Erode the mask to remove noise
         kernel = np.ones((5, 5), np.uint8)
         all_meat_mask_orig = cv2.erode(all_meat_mask_orig, kernel, iterations=1)
+
+        # cv2.imwrite("/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_hsv_mask_sam_orig.jpg", mask)
         
         # Meat dims in pixels
         meat_w = 100
@@ -162,6 +166,9 @@ class MeatSegmentGenerator():
             self.crop_ymin_hsv:self.crop_ymax_hsv,
             self.crop_xmin_hsv:self.crop_xmax_hsv
         ]
+    
+        # cv2.imwrite("/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_hsv_crop.jpg", cropped_image)
+
         self.lower_hsv, self.upper_hsv = get_hsv_range(cropped_image)
     
     def get_top_meat_slice(self, image):
