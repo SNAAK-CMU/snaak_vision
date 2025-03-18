@@ -17,7 +17,7 @@ import numpy as np
 from sensor_msgs.msg import CameraInfo
 import cv2
 from scipy.spatial.transform import Rotation as R
-
+import copy
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
@@ -95,12 +95,12 @@ class VisionNode(Node):
             10,
         )  # TODO fix this
         
-        self.subscription_tf_static = self.create_subscription(
-            TFMessage,
-            "/tf_static",
-            self.tf_static_listener_callback_tf_static,
-            qos_profile,
-        )
+        # self.subscription_tf_static = self.create_subscription(
+        #     TFMessage,
+        #     "/tf_static",
+        #     self.tf_static_listener_callback_tf_static,
+        #     qos_profile,
+        # )
         
         # Initialize image and transformation variables
         self.transformations = {}
@@ -136,13 +136,13 @@ class VisionNode(Node):
                     (transform.header.frame_id, transform.child_frame_id)
                 ] = transform
 
-    def tf_static_listener_callback_tf_static(self, msg):
-        """Handle incoming transform messages."""
-        for transform in msg.transforms:
-            if transform.child_frame_id and transform.header.frame_id:
-                self.transformations[
-                    (transform.header.frame_id, transform.child_frame_id)
-                ] = transform
+    # def tf_static_listener_callback_tf_static(self, msg):
+    #     """Handle incoming transform messages."""
+    #     for transform in msg.transforms:
+    #         if transform.child_frame_id and transform.header.frame_id:
+    #             self.transformations[
+    #                 (transform.header.frame_id, transform.child_frame_id)
+    #             ] = transform
 
     def depth_callback(self, msg):
         # Convert ROS Image message to OpenCV format
@@ -224,22 +224,22 @@ class VisionNode(Node):
 
         for frame_id, child_frame_id in link_order:
             if (frame_id, child_frame_id) in self.transformations:
-                trans = self.transformations[(frame_id, child_frame_id)].transform
+                transform = copy.deepcopy(self.transformations[(frame_id, child_frame_id)].transform)
                 translation = [
-                    trans.translation.x,
-                    trans.translation.y,
-                    trans.translation.z,
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z,
                 ]
                 rotation = [
-                    trans.rotation.x,
-                    trans.rotation.y,
-                    trans.rotation.z,
-                    trans.rotation.w,
+                    transform.rotation.x,
+                    transform.rotation.y,
+                    transform.rotation.z,
+                    transform.rotation.w,
                 ]
-                T_local = np.eye(4)
-                T_local[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
-                T_local[:3, 3] = translation
-                transform_matrices[(frame_id, child_frame_id)] = T_local
+                T = np.eye(4)
+                T[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
+                T[:3, 3] = translation
+                transform_matrices[(frame_id, child_frame_id)] = T
 
         T_link0_camera = (
             transform_matrices[("panda_link0", "panda_hand")]
