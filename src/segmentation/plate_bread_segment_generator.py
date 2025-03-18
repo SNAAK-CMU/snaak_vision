@@ -6,8 +6,8 @@ import numpy as np
 
 class PlateBreadSegementGenerator():
     def __init__(self):
-        self.lower_blue = np.array([90,50,50]) 
-        self.upper_blue = np.array([130,255,255]) 
+        self.lower_blue = np.array([90,40,40])
+        self.upper_blue = np.array([150,255,255]) 
         self.center_distance_thresh = 20
 
     def get_bread_pickup_point(self, image):
@@ -21,11 +21,25 @@ class PlateBreadSegementGenerator():
             cY: y coordinate of the pickup point
             bottom_y: y coordinate of the bottom of the acrylic sheet (as seen by the camera, in arm frame the left most point of the acrylic sheet)
         '''
-        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV) 
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV) 
         mask = cv2.inRange(hsv, self.lower_blue, self.upper_blue) 
-        res = cv2.bitwise_and(image,image, mask= mask) 
+        res = cv2.bitwise_and(image,image, mask= mask)
         gray = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
         ret,thresh = cv2.threshold(gray,10,255,0)
+        
+        # crop image
+        height, width = thresh.shape[:2]
+        crop_height = 400
+        crop_width = 300
+        crop_y_start = (height - crop_height) // 2
+        crop_y_end = crop_y_start + crop_height
+        crop_x_start = (width - crop_width) // 2
+        crop_x_end = crop_x_start + crop_width
+        crop_mask = np.zeros_like(thresh)
+        crop_mask[crop_y_start:crop_y_end, crop_x_start:crop_x_end] = 255
+        thresh = cv2.bitwise_and(thresh, crop_mask)
+
+
         min_area = 3000
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contours:

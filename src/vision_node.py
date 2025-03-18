@@ -267,6 +267,7 @@ class VisionNode(Node):
         image = self.rgb_image
 
         self.get_logger().info(f"{image.shape}")
+        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
         self.get_logger().info(f"Bin ID: {bin_id}")
         #self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
@@ -274,7 +275,6 @@ class VisionNode(Node):
         try:
             if bin_id == CHEESE_BIN_ID:
                 # Cheese
-                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
                 self.get_logger().info(f"Segmenting cheese")
 
@@ -302,7 +302,6 @@ class VisionNode(Node):
                 
             elif bin_id == HAM_BIN_ID:
                 # Ham
-                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
                 self.get_logger().info(f"Segmenting ham")
 
@@ -360,7 +359,7 @@ class VisionNode(Node):
 
             # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
             #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-            cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+            #cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
@@ -393,8 +392,8 @@ class VisionNode(Node):
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
         
-        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-
+        #image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+        image = self.rgb_image
         self.get_logger().info(f"Handle Place Point Called with location ID: {location_id}")
         self.get_logger().info(f"Tray ID: {ASSEMBLY_TRAY_ID}, Bread ID: {ASSEMBLY_BREAD_ID}")
 

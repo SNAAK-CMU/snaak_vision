@@ -39,7 +39,7 @@ class MeatSegmentGenerator():
         self.__create_sam_predictor()
         
         # Set up
-        self.got_first_img = Falseimage
+        self.got_first_img = False#image
         self.lower_hsv = None
         self.upper_hsv = None
         
@@ -90,7 +90,7 @@ class MeatSegmentGenerator():
         point_labels = np.array([0, 0, 0, 0])  # All are negative prompts
         
         # Predict mask using SAM2
-        self.predictor.set_image(cropped_image)image
+        self.predictor.set_image(cropped_image)#image
         masks, scores, logits = self.predictor.predict(
             point_coords=negative_points, 
             point_labels=point_labels,
