@@ -269,50 +269,84 @@ class VisionNode(Node):
         self.get_logger().info(f"{image.shape}")
 
         self.get_logger().info(f"Bin ID: {bin_id}")
-        self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
+        #self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
         
         try:
-            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-            
             if bin_id == CHEESE_BIN_ID:
                 # Cheese
+                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+
+                self.get_logger().info(f"Segmenting cheese")
+
                 # Get X, Y using SAM
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+
+                # Average the positions of white points to get center
+                y_coords, x_coords = np.where(mask == 1)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
+
+                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
+                    mask * 255,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
+                    image,
+                )
                 
             elif bin_id == HAM_BIN_ID:
                 # Ham
+                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+
+                self.get_logger().info(f"Segmenting ham")
+
                 # Get X, Y using SAM
                 mask = self.meat_segment_generator.get_top_meat_slice(image)
+                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+
+                # Average the positions of white points to get center
+                y_coords, x_coords = np.where(mask == 1)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
+
+                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_mask.jpg",
+                    mask * 255,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_img.jpg",
+                    image,
+                )
             
             elif bin_id == BREAD_BIN_ID:
                 # Bread
+
+                self.get_logger().info(f"Segmenting bread")
+
                 cam_x, cam_y, lower_y = self.plate_bread_segment_generator.get_bread_pickup_point(image)
                 cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
                 cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
+
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    image,
+                )
                 
             else:
                 raise "Incorrect Bin ID"
+
             
-            self.get_logger().info(f"Max value in mask {np.max(mask)}")
-
-            # Average the positions of white points to get center
-            y_coords, x_coords = np.where(mask == 1)
-            cam_x = int(np.mean(x_coords))
-            cam_y = int(np.mean(y_coords))
-
-            self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
-
-            # Save images for debugging
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
-                mask * 255,
-            )
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
-                image,
-            )
             if (
                 cam_x < 0
                 or cam_x >= self.depth_image.shape[1]
@@ -324,9 +358,9 @@ class VisionNode(Node):
             # Retrieve depth value at (x, y)
             cam_z = self.get_depth(cam_x, cam_y)
 
-                # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-                #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-                cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+            # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
+            #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+            cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
@@ -337,18 +371,21 @@ class VisionNode(Node):
 
             self.get_logger().info("got transform, applying it to point...")
 
-                response.x = response_transformed[0]
-                response.y = response_transformed[1]
-                response.z = response_transformed[2] - 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+            response.x = response_transformed[0]
+            response.y = response_transformed[1]
+            response.z = response_transformed[2] - 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
+        
+        except Exception as e:
+                self.get_logger().error(f"Error while calculating pickup point: {e}")
+                self.get_logger().error(traceback.print_exc())
+                response.x = -1.0
+                response.y = -1.0
+                response.z = float("nan") 
 
-            # publish point to topic - 0.03
-            response.y = -1.0
-            response.z = float("nan")
-            
         return response
 
     def handle_place_point(self, request, response):

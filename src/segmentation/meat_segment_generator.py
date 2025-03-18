@@ -69,19 +69,31 @@ class MeatSegmentGenerator():
         crop_ymin = CROP_YMIN
         crop_xmax = CROP_XMAX
         crop_ymax = CROP_YMAX
-        image = image[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
+        cropped_image = image[crop_ymin:crop_ymax, crop_xmin:crop_xmax]
         
         # Construct bounding box prompt using HSV mask
         mask = segment_from_hsv(image, self.lower_hsv, self.upper_hsv)
         kernel = np.ones((5, 5), np.uint8)  # 5x5 kernel
         mask = cv2.erode(mask, kernel, iterations=1)
+
         bounding_box = calc_bbox_from_mask(mask)
+        meat_right_x,  meat_top_y, meat_left_x, meat_bottom_y = bounding_box
+
+        negative_points = [
+            (meat_left_x, meat_top_y),  # Top-left
+            (meat_right_x, meat_top_y),  # Top-right
+            (meat_left_x, meat_bottom_y),  # Bottom-left
+            (meat_right_x, meat_bottom_y)   # Bottom-right
+        ]
+        point_labels = np.array([0, 0, 0, 0])  # All are negative prompts
         
         # Predict mask using SAM2
-        self.predictor.set_image(image)
+        self.predictor.set_image(cropped_image)
         masks, scores, logits = self.predictor.predict(
+            point_coords=negative_points, 
+            point_labels=point_labels,
             multimask_output=True,
-            box=bounding_box
+            box=bounding_box[None, :]
         )
         
         # Find the mask with the highest score
@@ -93,12 +105,8 @@ class MeatSegmentGenerator():
         all_meat_mask = masks[max_index]
         
         # Convert mask to original dimensions
-        all_meat_mask = convert_mask_to_orig_dims(all_meat_mask, crop_xmin, crop_ymin, image.shape)
-        all_meat_mask = masks[np.argmax(scores)]
-        all_meat_mask_orig = convert_mask_to_orig_dims(
-            all_meat_mask, image, crop_xmin, crop_ymin, crop_xmax, crop_ymax
-        )
-        
+        all_meat_mask_orig = convert_mask_to_orig_dims(all_meat_mask, image, crop_xmin, crop_ymin, crop_xmax, crop_ymax)
+
         # Erode the mask to remove noise
         kernel = np.ones((5, 5), np.uint8)
         all_meat_mask_orig = cv2.erode(all_meat_mask_orig, kernel, iterations=1)
@@ -106,6 +114,7 @@ class MeatSegmentGenerator():
         # Meat dims in pixels
         meat_w = 100
         meat_h = 100
+        
         y_indices, x_indices = np.where(all_meat_mask_orig * 255 == 255)
         
         if len(x_indices) == 0 or len(y_indices) == 0:
@@ -128,21 +137,10 @@ class MeatSegmentGenerator():
             [meat_left_x, meat_top_y, meat_right_x, meat_bottom_y]
         )
         
-        # negative prompt box for SAM
-        negative_points = [
-            (meat_left_x, meat_top_y),  # Top-left
-            (meat_right_x, meat_top_y),  # Top-right
-            (meat_left_x, meat_bottom_y),  # Bottom-left
-            (meat_right_x, meat_bottom_y)   # Bottom-right
-        ]
-        point_labels = np.array([0, 0, 0, 0])  # All are negative prompts
-        
         # Run SAM2 
         self.predictor.set_image(image)
         masks, scores, logits = self.predictor.predict(
-            box=meat_box[None, :], multimask_output=True,
-            points=negative_points, point_labels=point_labels
-        )
+            box=meat_box[None, :], multimask_output=True)
         
         sorted_ind = np.argsort(scores)[::-1]
         masks = masks[sorted_ind]
@@ -150,7 +148,7 @@ class MeatSegmentGenerator():
         logits = logits[sorted_ind]
         
         top_meat_mask = masks[np.argmax(scores)]
-        kernel = np.ones((5, 5), np.uint8)
+        kernel = np.ones((7, 7), np.uint8)
         top_meat_mask = cv2.erode(top_meat_mask, kernel, iterations=1)
         
         return top_meat_mask
@@ -160,10 +158,11 @@ class MeatSegmentGenerator():
         Calculates hsv range for segmenting meat by sampling the image
         """
         # Get HSV range for the first image
-        self.lower_hsv, self.upper_hsv = get_hsv_range(
-            image, self.crop_xmin_hsv, self.crop_ymin_hsv,
-            self.crop_xmax_hsv, self.crop_ymax_hsv
-        )
+        cropped_image = image[
+            self.crop_ymin_hsv:self.crop_ymax_hsv,
+            self.crop_xmin_hsv:self.crop_xmax_hsv
+        ]
+        self.lower_hsv, self.upper_hsv = get_hsv_range(cropped_image)
     
     def get_top_meat_slice(self, image):
         """
