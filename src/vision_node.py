@@ -310,7 +310,7 @@ class VisionNode(Node):
                 cam_z = self.get_depth(cam_x, cam_y)
 
                 # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-                cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+                #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
                 cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
                 if cam_z == 0:
@@ -324,7 +324,7 @@ class VisionNode(Node):
 
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
-                response.z = response_transformed[2]
+                response.z = response_transformed[2] - 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
                 self.get_logger().info(
                     f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
@@ -374,7 +374,7 @@ class VisionNode(Node):
                     raise Exception("Not enough room to pick up bread")
                 response.x = response_transformed[0]
                 response.y = response_transformed[1]
-                response.z = response_transformed[2]
+                response.z = response_transformed[2] - 0.03 # ensure you press down on plate
                 self.get_logger().info(
                     f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
                 )
