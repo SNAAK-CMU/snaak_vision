@@ -324,9 +324,9 @@ class VisionNode(Node):
             # Retrieve depth value at (x, y)
             cam_z = self.get_depth(cam_x, cam_y)
 
-            # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-            cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-            cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+                # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
+                #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+                cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
@@ -337,30 +337,15 @@ class VisionNode(Node):
 
             self.get_logger().info("got transform, applying it to point...")
 
-            response.x = response_transformed[0]
-            response.y = response_transformed[1]
-            response.z = response_transformed[2]
+                response.x = response_transformed[0]
+                response.y = response_transformed[1]
+                response.z = response_transformed[2] - 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
 
-            # publish point to topic
-            self.marker.pose.position = Point(
-                x=response.x, y=response.y, z=response.z
-            )
-
-            # Get the current time and set it in the header
-            self.marker.header.stamp = self.get_clock().now().to_msg()
-
-            # Publish the marker
-            self.marker_pub.publish(self.marker)
-            self.get_logger().info("Published point to RViz")
-
-        except Exception as e:
-            self.get_logger().error(f"Error while calculating pickup point: {e}")
-            self.get_logger().error(traceback.print_exc())
-            response.x = -1.0
+            # publish point to topic - 0.03
             response.y = -1.0
             response.z = float("nan")
             
