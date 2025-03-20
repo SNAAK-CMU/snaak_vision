@@ -42,8 +42,8 @@ class MeatSegmentGenerator:
         """
         Initializes and loads SAM2 model for meat segmentation
         """
-        # self.sam2_checkpoint = "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
-        self.sam2_checkpoint = "/home/user/sam2/checkpoints/sam2.1_hiera_small.pt"
+        self.sam2_checkpoint = "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
+        # self.sam2_checkpoint = "/home/user/sam2/checkpoints/sam2.1_hiera_small.pt"
         self.model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
         self.__create_sam_predictor()
 

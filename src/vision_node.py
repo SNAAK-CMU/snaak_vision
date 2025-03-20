@@ -50,7 +50,6 @@ class VisionNode(Node):
         self.meat_segment_generator = MeatSegmentGenerator()
 
         # init control variables
-        self.is_first_assembly_bread = True
         self.assembly_tray_box = None
         self.assembly_bread_xyz_base = None
 
@@ -422,43 +421,24 @@ class VisionNode(Node):
 
         if location_id == ASSEMBLY_BREAD_ID:
             self.get_logger().info(f"Segmenting Bread")
-            if self.is_first_assembly_bread:
-                self.get_logger().info(f"First time segmenting bread...")
-                mask = self.bread_segment_generator.get_bread_mask(image)
-                self.get_logger().info(f"Bread segmentation completed")
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+            mask = self.bread_segment_generator.get_bread_mask(image)
+            self.get_logger().info(f"Bread segmentation completed")
+            
+            # Average the positions of white points to get center
+            y_coords, x_coords = np.where(mask == 1)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
 
-                # Save images for debugging
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                    mask * 255,
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
-                    image,
-                )
-            else:
-                self.get_logger().info(f"Using previous bread estimate")
-                # Use previously calculated point
-                response.x, response.y, response.z = self.assembly_bread_xyz_base
-                self.get_logger().info(
-                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-                )
-                self.marker.pose.position = Point(
-                    x=response.x, y=response.y, z=response.z
-                )
-                self.marker.header.stamp = self.get_clock().now().to_msg()
-                self.marker_pub.publish(self.marker)
-                self.get_logger().info("Published point to RViz")
-                return response
-
-        # fixed values, replace with actual ones
-        # cam_x = 424.0
-        # cam_y = 240.0
+            # Save images for debugging
+            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                mask * 255,
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                image,
+            )
 
         # get depth
         cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
@@ -475,11 +455,6 @@ class VisionNode(Node):
         self.get_logger().info(
             f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
         )
-
-        # Remember the bread location for future ingredients
-        if location_id == ASSEMBLY_BREAD_ID and self.is_first_assembly_bread:
-            self.assembly_bread_xyz_base = (response.x, response.y, response.z)
-            self.is_first_assembly_bread = False
 
         # publish point to topic
         self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
