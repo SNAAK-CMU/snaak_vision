@@ -318,10 +318,6 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_mask.jpg",
-                    mask * 255,
-                )
-                cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_img.jpg",
                     image,
                 )
