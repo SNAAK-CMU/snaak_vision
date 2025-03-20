@@ -17,11 +17,12 @@ import numpy as np
 from sensor_msgs.msg import CameraInfo
 import cv2
 from scipy.spatial.transform import Rotation as R
-
+import copy
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
+from segmentation.meat_segment_generator import MeatSegmentGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
 # Make these config
@@ -45,9 +46,10 @@ class VisionNode(Node):
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
-        self.plate_bread_segment_generator = PlateBreadSegementGenerator()
+        self.plate_bread_segment_generator = PlateBreadSegementGenerator()        
+        self.meat_segment_generator = MeatSegmentGenerator()
+
         # init control variables
-        self.is_first_assembly_bread = True
         self.assembly_tray_box = None
         self.assembly_bread_xyz_base = None
 
@@ -91,25 +93,28 @@ class VisionNode(Node):
             self.camera_intrinsics_callback,
             10,
         )  # TODO fix this
-        self.subscription_tf_static = self.create_subscription(
-            TFMessage,
-            "/tf_static",
-            self.tf_static_listener_callback_tf_static,
-            qos_profile,
-        )
-
-        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
-
+        
+        # self.subscription_tf_static = self.create_subscription(
+        #     TFMessage,
+        #     "/tf_static",
+        #     self.tf_static_listener_callback_tf_static,
+        #     qos_profile,
+        # )
+        
+        # Initialize image and transformation variables
         self.transformations = {}
         self.K = np.eye(3)
         self.distortion_coefficients = np.zeros((1, 5))
         self.width = 0
         self.height = 0
 
+        # To publish pickup point to RViz
+        self.marker_pub = self.create_publisher(Marker, "visualization_marker", 10)
+
         # for visualizing pickup point
         self.marker = Marker()
         self.marker.header.frame_id = (
-            "panda_link0"  # Frame of reference (e.g., base_link)
+            "panda_link0"  # Frame of reference - base link of the robot arm
         )
         self.marker.id = 0
         self.marker.type = Marker.SPHERE  # Marker type is a sphere
@@ -130,13 +135,13 @@ class VisionNode(Node):
                     (transform.header.frame_id, transform.child_frame_id)
                 ] = transform
 
-    def tf_static_listener_callback_tf_static(self, msg):
-        """Handle incoming transform messages."""
-        for transform in msg.transforms:
-            if transform.child_frame_id and transform.header.frame_id:
-                self.transformations[
-                    (transform.header.frame_id, transform.child_frame_id)
-                ] = transform
+    # def tf_static_listener_callback_tf_static(self, msg):
+    #     """Handle incoming transform messages."""
+    #     for transform in msg.transforms:
+    #         if transform.child_frame_id and transform.header.frame_id:
+    #             self.transformations[
+    #                 (transform.header.frame_id, transform.child_frame_id)
+    #             ] = transform
 
     def depth_callback(self, msg):
         # Convert ROS Image message to OpenCV format
@@ -218,22 +223,22 @@ class VisionNode(Node):
 
         for frame_id, child_frame_id in link_order:
             if (frame_id, child_frame_id) in self.transformations:
-                trans = self.transformations[(frame_id, child_frame_id)].transform
+                transform = copy.deepcopy(self.transformations[(frame_id, child_frame_id)].transform)
                 translation = [
-                    trans.translation.x,
-                    trans.translation.y,
-                    trans.translation.z,
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z,
                 ]
                 rotation = [
-                    trans.rotation.x,
-                    trans.rotation.y,
-                    trans.rotation.z,
-                    trans.rotation.w,
+                    transform.rotation.x,
+                    transform.rotation.y,
+                    transform.rotation.z,
+                    transform.rotation.w,
                 ]
-                T_local = np.eye(4)
-                T_local[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
-                T_local[:3, 3] = translation
-                transform_matrices[(frame_id, child_frame_id)] = T_local
+                T = np.eye(4)
+                T[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
+                T[:3, 3] = translation
+                transform_matrices[(frame_id, child_frame_id)] = T
 
         T_link0_camera = (
             transform_matrices[("panda_link0", "panda_hand")]
@@ -261,17 +266,19 @@ class VisionNode(Node):
         image = self.rgb_image
 
         self.get_logger().info(f"{image.shape}")
+        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
 
         self.get_logger().info(f"Bin ID: {bin_id}")
-        self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
+        #self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
+        
+        try:
+            if bin_id == CHEESE_BIN_ID:
+                # Cheese
 
-        if bin_id == CHEESE_BIN_ID:
-            # Cheese
-            try:
+                self.get_logger().info(f"Segmenting cheese")
+
                 # Get X, Y using SAM
-                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 mask = self.cheese_segment_generator.get_top_cheese_slice(image)
-
                 self.get_logger().info(f"Max value in mask {np.max(mask)}")
 
                 # Average the positions of white points to get center
@@ -280,9 +287,9 @@ class VisionNode(Node):
                 cam_y = int(np.mean(y_coords))
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
                 # Save images for debugging
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask * 255,
@@ -291,111 +298,87 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
                     image,
                 )
+                
+            elif bin_id == HAM_BIN_ID:
+                # Ham
 
-                # Middle of camera FOV
-                # cam_x = 424
-                # cam_y = 240depth_image
+                self.get_logger().info(f"Segmenting ham")
 
-                # Get Z
-                # Ensure coordinates are within bounds of the image dimensions
-                if (
-                    cam_x < 0
-                    or cam_x >= self.depth_image.shape[1]
-                    or cam_y < 0
-                    or cam_y >= self.depth_image.shape[0]
-                ):
-                    raise ValueError("Coordinates out of bounds")
+                # Get X, Y using SAM
+                cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(image)
+                # self.get_logger().info(f"Max value in mask {np.max(mask)}")
 
-                # Retrieve depth value at (x, y)
-                cam_z = self.get_depth(cam_x, cam_y)
+                # Average the positions of white points to get center
+                # y_coords, x_coords = np.where(mask == 1)
+                # cam_x = int(np.mean(x_coords))
+                # cam_y = int(np.mean(y_coords))
 
-                # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-                cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-                cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
-                if cam_z == 0:
-                    raise Exception("Invalid Z")
-                # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
-
-                self.get_logger().info("transforming coordinates...")
-                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
-
-                self.get_logger().info("got transform, applying it to point...")
-
-                response.x = response_transformed[0]
-                response.y = response_transformed[1]
-                response.z = response_transformed[2]
-
-                self.get_logger().info(
-                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_img.jpg",
+                    image,
                 )
+            
+            elif bin_id == BREAD_BIN_ID:
+                # Bread
 
-                # publish point to topic
-                self.marker.pose.position = Point(
-                    x=response.x, y=response.y, z=response.z
-                )
+                self.get_logger().info(f"Segmenting bread")
 
-                # Get the current time and set it in the header
-                self.marker.header.stamp = self.get_clock().now().to_msg()
-
-                # Publish the marker
-                self.marker_pub.publish(self.marker)
-                self.get_logger().info("Published point to RViz")
-
-            except Exception as e:
-                self.get_logger().error(f"Error while calculating pickup point: {e}")
-                self.get_logger().error(traceback.print_exc())
-                response.x = -1.0
-                response.y = -1.0
-                response.z = float("nan")
-
-        elif bin_id == HAM_BIN_ID:
-            # TODO
-            pass
-
-        elif bin_id == BREAD_BIN_ID:
-            # TODO: test
-            try:
                 cam_x, cam_y, lower_y = self.plate_bread_segment_generator.get_bread_pickup_point(image)
                 cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
                 cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
 
+                # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_bin_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
                     image,
                 )
-                cam_z = self.get_depth(cam_x, cam_y)
-                if cam_z == 0:
-                    raise Exception("Invalid Z")
-                response_transformed = self.transform_location(cam_x, cam_y, cam_z)
-                bottom_transformed = self.transform_location(cam_x, lower_y, cam_z)
-                self.get_logger().info(f"{np.abs(response_transformed[1] - bottom_transformed[1])}")
-                if np.abs(response_transformed[1] - bottom_transformed[1]) < 0.025:
-                    raise Exception("Not enough room to pick up bread")
-                response.x = response_transformed[0]
-                response.y = response_transformed[1]
-                response.z = response_transformed[2]
-                self.get_logger().info(
-                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-                )
-                self.marker.pose.position = Point(
-                    x=response.x, y=response.y, z=response.z
-                )
+                
+            else:
+                raise "Incorrect Bin ID"
 
-                # Get the current time and set it in the header
-                self.marker.header.stamp = self.get_clock().now().to_msg()
+            
+            if (
+                cam_x < 0
+                or cam_x >= self.depth_image.shape[1]
+                or cam_y < 0
+                or cam_y >= self.depth_image.shape[0]
+            ):
+                raise ValueError("Coordinates out of bounds")
+            
+            # Retrieve depth value at (x, y)
+            cam_z = self.get_depth(cam_x, cam_y)
 
-                # Publish the marker
-                self.marker_pub.publish(self.marker)
-                self.get_logger().info("Published point to RViz")
-            except Exception as e:
+            # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
+            #cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+            #cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
+
+            if cam_z == 0:
+                raise Exception("Invalid Z")
+            # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
+
+            self.get_logger().info("transforming coordinates...")
+            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+
+            self.get_logger().info("got transform, applying it to point...")
+
+            response.x = response_transformed[0]
+            response.y = response_transformed[1]
+            response.z = response_transformed[2] - 0.03 # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+
+            self.get_logger().info(
+                f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+            )
+        
+        except Exception as e:
                 self.get_logger().error(f"Error while calculating pickup point: {e}")
                 self.get_logger().error(traceback.print_exc())
                 response.x = -1.0
                 response.y = -1.0
-                response.z = float("nan")
-        else:
-            raise "Incorrect Bin ID"
+                response.z = float("nan") 
 
         return response
 
@@ -404,8 +387,8 @@ class VisionNode(Node):
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
         
-        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-
+        #image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+        image = self.rgb_image
         self.get_logger().info(f"Handle Place Point Called with location ID: {location_id}")
         self.get_logger().info(f"Tray ID: {ASSEMBLY_TRAY_ID}, Bread ID: {ASSEMBLY_BREAD_ID}")
 
@@ -434,43 +417,24 @@ class VisionNode(Node):
 
         if location_id == ASSEMBLY_BREAD_ID:
             self.get_logger().info(f"Segmenting Bread")
-            if self.is_first_assembly_bread:
-                self.get_logger().info(f"First time segmenting bread...")
-                mask = self.bread_segment_generator.get_bread_mask(image)
-                self.get_logger().info(f"Bread segmentation completed")
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+            mask = self.bread_segment_generator.get_bread_mask(image)
+            self.get_logger().info(f"Bread segmentation completed")
+            
+            # Average the positions of white points to get center
+            y_coords, x_coords = np.where(mask == 1)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
 
-                # Save images for debugging
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                    mask * 255,
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
-                    image,
-                )
-            else:
-                self.get_logger().info(f"Using previous bread estimate")
-                # Use previously calculated point
-                response.x, response.y, response.z = self.assembly_bread_xyz_base
-                self.get_logger().info(
-                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-                )
-                self.marker.pose.position = Point(
-                    x=response.x, y=response.y, z=response.z
-                )
-                self.marker.header.stamp = self.get_clock().now().to_msg()
-                self.marker_pub.publish(self.marker)
-                self.get_logger().info("Published point to RViz")
-                return response
-
-        # fixed values, replace with actual ones
-        # cam_x = 424.0
-        # cam_y = 240.0
+            # Save images for debugging
+            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                mask * 255,
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                image,
+            )
 
         # get depth
         cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
@@ -487,11 +451,6 @@ class VisionNode(Node):
         self.get_logger().info(
             f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
         )
-
-        # Remember the bread location for future ingredients
-        if location_id == ASSEMBLY_BREAD_ID and self.is_first_assembly_bread:
-            self.assembly_bread_xyz_base = (response.x, response.y, response.z)
-            self.is_first_assembly_bread = False
 
         # publish point to topic
         self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
