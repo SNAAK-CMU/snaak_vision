@@ -139,3 +139,13 @@ def get_top_from_all_cheese(cheese_w, chees_h, all_cheese_mask):
     mask = cv2.erode(all_cheese_mask, kernel, iterations=1)
     
 
+def keep_largest_blob(binary_image):
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return binary_image
+    
+    largest_contour = max(contours, key=cv2.contourArea)
+    largest_blob_image = np.zeros_like(binary_image)
+    cv2.drawContours(largest_blob_image, [largest_contour], -1, 255, thickness=cv2.FILLED)
+    return largest_blob_image

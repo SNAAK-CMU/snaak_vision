@@ -306,13 +306,13 @@ class VisionNode(Node):
                 self.get_logger().info(f"Segmenting ham")
 
                 # Get X, Y using SAM
-                mask = self.meat_segment_generator.get_top_meat_slice(image)
-                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+                cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(image)
+                # self.get_logger().info(f"Max value in mask {np.max(mask)}")
 
                 # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+                # y_coords, x_coords = np.where(mask == 1)
+                # cam_x = int(np.mean(x_coords))
+                # cam_y = int(np.mean(y_coords))
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
