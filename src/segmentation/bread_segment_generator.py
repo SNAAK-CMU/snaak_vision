@@ -10,9 +10,12 @@ from pycocotools.mask import decode
 
 from segmentation.segment_utils import convert_mask_to_orig_dims
 
+############# Parameters ################
 
 BREAD_AREA_GT = 11500
 TRAY_BOX_PIX = (295, 103, 530, 280)
+
+#########################################
 
 
 class BreadSegmentGenerator:
@@ -21,10 +24,7 @@ class BreadSegmentGenerator:
     TRAY_BOX_PIX = TRAY_BOX_PIX
 
     def __init__(self):
-        # TODO: Change paths according deployment environment
-        self.sam2_checkpoint = (
-            "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
-        )
+        self.sam2_checkpoint = "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
         self.model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
         # self.sam2_checkpoint = "/home/user/sam2/checkpoints/sam2.1_hiera_small.pt"
@@ -47,7 +47,7 @@ class BreadSegmentGenerator:
             model=self.sam2,
             points_per_side=32,
             points_per_batch=128,
-            pred_iou_thresh=0.5,
+            pred_iou_thresh=0.5,  # TODO: Change paths according deployment environment
             stability_score_thresh=0.92,
             stability_score_offset=0.7,
             crop_nms_thresh=0.7,

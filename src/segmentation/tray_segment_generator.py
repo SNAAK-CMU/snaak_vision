@@ -8,7 +8,12 @@ import cv2
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
+
+######### Parameters ###########
+
 TRAY_AREA_GT = 120000
+
+################################
 
 
 class TraySegmentGenerator:
@@ -28,7 +33,6 @@ class TraySegmentGenerator:
         # self.sam2_checkpoint = (
         #     "/home/user/sam2/checkpoints/sam2.1_hiera_small.pt"
         # )
-        # self.model_cfg = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
         self.__create_sam_predictor()
 

@@ -177,6 +177,6 @@ class MeatSegmentGenerator:
             self.__calibrate_color_thresholding(image)
 
         # Get middle of top meat slice
-        x,y = self.__segment_top_meat_e2e(image)
+        x, y = self.__segment_top_meat_e2e(image)
 
         return x, y
