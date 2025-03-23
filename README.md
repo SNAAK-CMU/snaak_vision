@@ -1,39 +1,38 @@
 # ROS2 Node for Vision Subsystem
 
-check coordinates/src/main.py for pipeline of image -> X, Y
-TODO: integrate X,Y -> Z as new class
-TODO: write the node in main.py and define a service: request Image, response: X, Y, Z
+The ROS2 node for the vision subsystem of SNAAK.
 
-### Managing the Unet submodule:
+## Topic Subscriptions
 
-1. if the path of the unet folder changes, fix the path in .gitmodules
-2. to sync changes to the latest pushed state of the submodule in this repo:
-```bash
-git submodule update
-```
-This pulls changes from whatever detached HEAD the submodule is currently in
+1. /camera/camera/color/image_rect_raw
+    - The raw RGB image topic
+    - Type: sensor_msgs/Image
+2. /camera/camera/depth/image_rect_raw
+    - The raw depth map topic
+    - Type: sensor_msgs/Image
 
-To checkout to a specific branch in the submodule's original repo:
-```bash
-git checkout "branch"
-```
+## Services Provided
 
-3. to make changes to the UNet repo
-    1. make changes in src/unet
-    2. add and commit 
-    3. connect to local branch and push changes:
-    ```bash
-    git push origin HEAD:local
-    ```
-    This will push changes to 'local' branch in submodule repo and detach
-    4. cd into src directory and run
-    ```bash
-    git submodule update
-    ```
-    5. Now push the submodule update in the parent repo:
-    ```bash
-    cd ..
-    git commit -m "updated submodule to track latest changes to 'local' branch in submodule repo"
-    git pull && git push
-    ```
-    Now the submodule is detached and the latest pushed state is saved
+1. /snaak_vision/get_depth_at_point
+    - Returns depth value from depth map at given XY point
+    - Type: snaak_vision/GetDepthAtPoint
+        - Request: int32 x; int32 y
+        - Response: float32 depth
+
+2. /snaak_vision/get_pickup_point
+    - Returns pickup point for the ingredient in the bin defined by location ID
+    - Type: snaak_vision/GetXYZFromImage
+        - Request: int32 location_id; float32 timestamp
+        - Current Location ID definitions:
+            - HAM_BIN_ID = 1
+            - CHEESE_BIN_ID = 2
+            - BREAD_BIN_ID = 3
+        - Response: float32 x; float32 y; float32 z
+3. /snaak_vision/get_place_point
+    - Returns place point, which is currently defined as the center of the bread on the tray
+    - Type: snaak_vision/GetXYZFromImage
+        - Request: int32 location_id; float32 timestamp
+        - Current Location ID definitions:
+            - ASSEMBLY_TRAY_ID = 4
+            - ASSEMBLY_BREAD_ID = 5
+        - Response: float32 x; float32 y; float32 z
