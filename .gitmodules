@@ -1,6 +1,0 @@
-[submodule "coordinates/src/unet"]
-	path = coordinates/src/unet
-	url = https://github.com/SNAAK-CMU/UNet
-[submodule "src/cheese_segmentation"]
-	path = src/cheese_segmentation
-	url = https://github.com/SNAAK-CMU/cheese_segmentation.git
