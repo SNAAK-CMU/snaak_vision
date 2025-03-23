@@ -2,6 +2,24 @@
 
 The ROS2 node for the vision subsystem of SNAAK.
 
+## Setup and Running
+
+1. Setup a Python3 virtual environment and install requirements
+
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    ```
+
+2. Remember to activate the environment before running the code
+
+    ```bash
+    source .venv/bin/activate
+    ros2 run snaak_vision vision_node.py
+    ```
+
 ## Topic Subscriptions
 
 1. /camera/camera/color/image_rect_raw
