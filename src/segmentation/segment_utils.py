@@ -167,3 +167,118 @@ def keep_largest_blob(binary_image):
         largest_blob_image, [largest_contour], -1, 255, thickness=cv2.FILLED
     )
     return largest_blob_image
+
+def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False):
+     # can adjust the threshold value (150) based on the image characteristics
+
+    original_image = image.copy()
+
+    # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
+    gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+
+    # Step 2.1: Binary Thresholding
+    _, binary = cv2.threshold(blurred, binary_threshold, 255, cv2.THRESH_BINARY_INV)
+    
+    # Step 2.2: HSV Thresholding
+    # TODO
+    
+
+    # Step 3: Morphological Operations
+    kernel = np.ones((5, 5), np.uint8)
+    binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # Close gaps
+    binary_opened = cv2.morphologyEx(binary_closed, cv2.MORPH_OPEN, kernel)   # Remove noise
+    
+    if show_steps:
+        plt.figure(figsize=(12, 8))
+        plt.subplot(1, 4, 1)
+        plt.title("Original Image")
+        plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
+        plt.subplot(1, 4, 2)
+        plt.title("Grayscale Image")
+        plt.imshow(gray, cmap="gray")
+        plt.subplot(1, 4, 3)
+        plt.title("Blurred Image")
+        plt.imshow(blurred, cmap="gray")
+        plt.subplot(1, 4, 4)
+        plt.title("Binary Image")
+        plt.imshow(binary_opened, cmap="gray")
+        plt.show()
+    
+
+    # Step 4: Contour Detection
+    contours, heirarchy = cv2.findContours(binary_opened, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    print(f"Number of contours detected: {len(contours)}")
+    
+    # Visualize All Detected Contours
+    if show_image:
+        contour_image_all = original_image.copy()
+        cv2.drawContours(contour_image_all, contours, -1, (0, 255, 0), thickness=2)
+        plt.figure(figsize=(6, 6))
+        plt.title("All Detected Contours")
+        plt.imshow(cv2.cvtColor(contour_image_all, cv2.COLOR_BGR2RGB))
+   
+     # Visualize each separate contour and its area
+    if show_separate_contours:
+        for i, contour in enumerate(contours):
+            area = cv2.contourArea(contour)
+            print(f"Contour {i}: Area = {area}")
+
+            # Create a mask for the current contour
+            mask = np.zeros_like(gray)
+            cv2.drawContours(mask, [contour], -1, (255), thickness=cv2.FILLED)
+
+            # Apply mask to the original image to segment the contour
+            segmented_contour = cv2.bitwise_and(original_image, original_image, mask=mask)
+
+            # Visualize the segmented contour
+            plt.figure(figsize=(6, 6))
+            plt.title(f"Segmented Contour {i} (Area = {area})")
+            plt.imshow(cv2.cvtColor(segmented_contour, cv2.COLOR_BGR2RGB))
+            plt.axis('off')
+            plt.show()
+
+    return contours
+
+def difference_mask(image1, image2, thresh):
+    """
+    Segment out those pixels that changed from the previous image
+    """
+    # convert images to grayscale for comparison
+    gray1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
+    gray2 = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)
+
+    #compute Absolute Difference
+    difference = cv2.absdiff(gray1, gray2)
+
+    #threshold the Difference to Isolate Changed Pixels
+    _, thresholded_diff = cv2.threshold(difference, thresh, 255, cv2.THRESH_BINARY) # 10 is the pixel difference threshold value - adjust according to your needs
+
+    #morphological Operations
+    kernel = np.ones((5, 5), np.uint8)
+    thresholded_diff = cv2.morphologyEx(thresholded_diff, cv2.MORPH_CLOSE, kernel)  # Fill gaps
+    
+    # apply Mask to Original Image (Highlight Changes)
+    # changed_pixels_image = cv2.bitwise_and(image2, image2, mask=mask)
+
+    # # Visualization of Results
+    # plt.figure(figsize=(12, 8))
+
+    # plt.subplot(1, 3, 1)
+    # plt.title("Image 1")
+    # plt.imshow(cv2.cvtColor(image1, cv2.COLOR_BGR2RGB))
+
+    # plt.subplot(1, 3, 2)
+    # plt.title("Image 2")
+    # plt.imshow(cv2.cvtColor(image2, cv2.COLOR_BGR2RGB))
+
+    # plt.subplot(1, 3, 3)
+    # plt.title("Changed Pixels Highlighted")
+    # plt.imshow(cv2.cvtColor(changed_pixels_image, cv2.COLOR_BGR2RGB))
+
+    # plt.tight_layout()
+    # plt.show()
+
+
+    return thresholded_diff
