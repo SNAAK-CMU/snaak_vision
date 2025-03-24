@@ -23,6 +23,8 @@ class TestCalibration(Node):
     ROS Node with service to test calibration of camera. Detects bolt on the left center of the 
     assembly area (to the left of the scale next to bin 2).
     Returns the difference between the camera localized point and point measured using the arm.
+
+    Running the node: requires frankapy to be launched, and the realsense and eye2hand nodes to be running.
     '''
     def __init__(self):
         super().__init__('test_calibration')
