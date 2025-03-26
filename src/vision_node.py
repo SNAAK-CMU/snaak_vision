@@ -404,7 +404,7 @@ class VisionNode(Node):
             self.get_logger().info(f"Bread segmentation completed")
 
             # Average the positions of white points to get center
-            y_coords, x_coords = np.where(mask == 1)
+            y_coords, x_coords = np.where(mask == 255)
             cam_x = int(np.mean(x_coords))
             cam_y = int(np.mean(y_coords))
 

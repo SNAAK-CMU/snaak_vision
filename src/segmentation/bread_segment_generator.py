@@ -5,7 +5,7 @@ Script to define class for segmenting the first bread slice in the assembly area
 import numpy as np
 import cv2
 
-from segmentation.segment_utils import convert_mask_to_orig_dims
+from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv
 
 ############# Parameters ################
 
@@ -36,8 +36,9 @@ class BreadSegmentGenerator:
         ]
         cropped_image = cv2.GaussianBlur(cropped_image, (5, 5), 0)
 
-        hsv_img = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv_img, self.hsv_lower_bound, self.hsv_upper_bound)
+        mask = segment_from_hsv(
+            cropped_image, self.hsv_lower_bound, self.hsv_upper_bound
+        )
 
         kernel = np.ones((5, 5), np.uint8)
         opened_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
