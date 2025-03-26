@@ -10,7 +10,7 @@ from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_h
 ############# Parameters ################
 
 TRAY_BOX_PIX = (250, 60, 630, 300)  # xmin, ymin, xmax, ymax
-HSV_LOWER_BOUND = (16, 81, 189)
+HSV_LOWER_BOUND = (13, 70, 175)
 HSV_UPPER_BOUND = (120, 255, 255)
 
 #########################################
