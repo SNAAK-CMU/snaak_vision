@@ -366,7 +366,7 @@ class VisionNode(Node):
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
 
-        # image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+        
         image = self.rgb_image
         self.get_logger().info(
             f"Handle Place Point Called with location ID: {location_id}"
@@ -399,6 +399,7 @@ class VisionNode(Node):
             )
 
         if location_id == ASSEMBLY_BREAD_ID:
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Segmenting Bread")
             mask = self.bread_segment_generator.get_bread_mask(image)
             self.get_logger().info(f"Bread segmentation completed")
@@ -412,7 +413,7 @@ class VisionNode(Node):
             cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                mask * 255,
+                mask,
             )
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
