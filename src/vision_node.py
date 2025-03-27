@@ -23,7 +23,7 @@ from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
-from segmentation.segment_utils import calc_bbox_from_mask
+from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point
 
 ############### Parameters #################
 
@@ -351,6 +351,7 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
+            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id)
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
