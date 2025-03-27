@@ -168,27 +168,36 @@ def keep_largest_blob(binary_image):
     )
     return largest_blob_image
 
-def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False):
+def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7):
      # can adjust the threshold value (150) based on the image characteristics
+    """
+    Erosion and Dilation:
 
+    Erosion: A larger kernel size will erode more of the foreground object, making it smaller. This is useful for removing small noise but can also remove small parts of the object.
+    Dilation: A larger kernel size will dilate more of the foreground object, making it larger. This can fill in small holes and gaps but can also cause small objects to merge.
+    Opening and Closing:
+
+    Opening (Erosion followed by Dilation): A larger kernel size will remove larger noise and small objects from the foreground. It is useful for separating objects that are close to each other.
+    Closing (Dilation followed by Erosion): A larger kernel size will close larger gaps and holes within the foreground object. It is useful for connecting disjointed parts of an object.
+
+    """
     original_image = image.copy()
 
     # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
     gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     
-
     # Step 2.1: Binary Thresholding
     _, binary = cv2.threshold(blurred, binary_threshold, 255, cv2.THRESH_BINARY_INV)
     
     # Step 2.2: HSV Thresholding
     # TODO
-    
 
     # Step 3: Morphological Operations
-    kernel = np.ones((5, 5), np.uint8)
-    binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)  # Close gaps
-    binary_opened = cv2.morphologyEx(binary_closed, cv2.MORPH_OPEN, kernel)   # Remove noise
+    close_kernel = np.ones((close_kernel_size, close_kernel_size), np.uint8)
+    open_kernel = np.ones((open_kernel_size, open_kernel_size), np.uint8)
+    binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, close_kernel)  # Close gaps
+    binary_opened = cv2.morphologyEx(binary_closed, cv2.MORPH_OPEN, open_kernel)   # Remove noise
     
     if show_steps:
         plt.figure(figsize=(12, 8))
@@ -239,7 +248,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             plt.axis('off')
             plt.show()
 
-    return contours
+    return contours, heirarchy
 
 def difference_mask(image1, image2, thresh):
     """
