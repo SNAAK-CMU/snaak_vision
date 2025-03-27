@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/home/snaak/Documents/manipulation_ws/src/snaak_vision/.venv/bin/python3
+
+# Change above line if chaning .venv location
 # author: Oliver
 import rclpy
 from rclpy.node import Node
