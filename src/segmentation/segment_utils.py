@@ -8,10 +8,11 @@ import cv2
 
 ############### Parameters #################
 
+SUCTION_CUP_RADIUS = 0.03
 # bottom left and top right point of bin in arm link0 frame
-BIN1_PICKUP_AREA = [(0.7, -0.2), (0.9, -0.6)]
-BIN2_PICKUP_AREA = [(0.4, -0.2), (0.6, -0.6)] 
-BIN3_PICKUP_AREA = [(0.1, -0.2), (0.3, -0.6)] 
+BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
+BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)] 
+BIN3_PICKUP_AREA = [(0.177, -0.24), (0.307, -0.48)] 
 
 ############################################
 
@@ -192,7 +193,8 @@ def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
 
     # Two y conditions since we can have negative y values, just want to make sure we are
     # in between the bounds
-    if bl_X <= X_pickup <= tr_X and (bl_Y <= Y_pickup <= tr_Y or tr_Y <= Y_pickup <= bl_Y):
+    r_cup = SUCTION_CUP_RADIUS
+    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y + r_cup <= Y_pickup <= tr_Y - r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
         return True
     else:
         return False

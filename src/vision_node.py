@@ -313,7 +313,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_plate_img.jpg",
                     image,
                 )
 
@@ -354,6 +354,7 @@ class VisionNode(Node):
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
             is_reachable = is_valid_pickup_point(response.x, response.y, bin_id)
+            if not is_reachable: raise Exception("Pickup point not within bin")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
