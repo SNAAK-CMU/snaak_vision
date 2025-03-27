@@ -16,6 +16,7 @@ def generate_launch_description():
             name='snaak_vision',
             prefix=launch.substitutions.LaunchConfiguration('virtualenv_python_executable')
         ),
+
         launch_ros.actions.Node(
             package="realsense2_camera",
             executable="realsense2_camera_node",
