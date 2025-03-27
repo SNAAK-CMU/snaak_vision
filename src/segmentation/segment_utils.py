@@ -6,6 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+############### Parameters #################
+
+# bottom left and top right point of bin in arm link0 frame
+BIN1_PICKUP_AREA = [(0.7, -0.2), (0.9, -0.6)]
+BIN2_PICKUP_AREA = [(0.4, -0.2), (0.6, -0.6)] 
+BIN3_PICKUP_AREA = [(0.1, -0.2), (0.3, -0.6)] 
+
+############################################
 
 def convert_mask_to_orig_dims(
     cropped_mask, orig_img, crop_xmin, crop_ymin, crop_xmax, crop_ymax
@@ -167,3 +175,24 @@ def keep_largest_blob(binary_image):
         largest_blob_image, [largest_contour], -1, 255, thickness=cv2.FILLED
     )
     return largest_blob_image
+
+def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
+    if (bin_id == 1):
+        pickup_area = BIN1_PICKUP_AREA
+    elif (bin_id == 2):
+        pickup_area = BIN2_PICKUP_AREA
+    elif (bin_id == 3):
+        pickup_area = BIN3_PICKUP_AREA
+    else:
+        raise Exception("Not a valid bin id")
+    
+    # bl -> bottom left, tr -> top right
+    bl_X, bl_Y = pickup_area[0]
+    tr_X, tr_Y = pickup_area[1] 
+
+    # Two y conditions since we can have negative y values, just want to make sure we are
+    # in between the bounds
+    if bl_X <= X_pickup <= tr_X and (bl_Y <= Y_pickup <= tr_Y or tr_Y <= Y_pickup <= bl_Y):
+        return True
+    else:
+        return False
