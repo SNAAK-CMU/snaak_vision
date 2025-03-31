@@ -110,7 +110,9 @@ def get_hsv_range(roi):
     """
     Get lower and upper hsv range for all pixels in the region of interest (roi)
     """
+    
     roi_hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    
     h_min = np.min(roi_hsv[:, :, 0])
     h_max = np.max(roi_hsv[:, :, 0])
     s_min = np.min(roi_hsv[:, :, 1])
@@ -124,6 +126,30 @@ def get_hsv_range(roi):
 
     return lower_hsv, upper_hsv
 
+def get_hsv_range_from_image(image):
+    """
+    Get lower and upper hsv range for all pixels in the image, ignoring black pixels
+    """
+    
+    # Convert the image to HSV color space
+    hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    # Create a mask to ignore black pixels
+    mask = (hsv_image[:, :, 1] > 0) & (hsv_image[:, :, 2] > 0) & (hsv_image[:, :, 0] > 0)
+
+    # Get the non-black pixels in the HSV image
+    non_black_pixels = hsv_image[mask]
+
+    # Calculate the min and max values for each channel
+    h_min, s_min, v_min = np.min(non_black_pixels, axis=0)
+    h_max, s_max, v_max = np.max(non_black_pixels, axis=0)
+
+    # Define HSV lower and upper bounds
+    lower_hsv = np.array([h_min, s_min, v_min])
+    upper_hsv = np.array([h_max, s_max, v_max])
+
+    return lower_hsv, upper_hsv
+    
 
 def segment_from_hsv(image, lower_hsv, upper_hsv):
     """
@@ -168,8 +194,8 @@ def keep_largest_blob(binary_image):
     )
     return largest_blob_image
 
-def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7):
-     # can adjust the threshold value (150) based on the image characteristics
+def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='binary', edges_thresholds=(30, 50)):
+     # can adjust the threshold values based on the image characteristics
     """
     Erosion and Dilation:
 
@@ -182,42 +208,100 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
 
     """
     original_image = image.copy()
+    
+    if segment_type == 'binary':
 
-    # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
-    gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Step 2.1: Binary Thresholding
-    _, binary = cv2.threshold(blurred, binary_threshold, 255, cv2.THRESH_BINARY_INV)
-    
-    # Step 2.2: HSV Thresholding
-    # TODO
+        # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
+        gray = cv2.cvtColor(original_image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Step 2: Binary Thresholding
+        _, binary = cv2.threshold(blurred, binary_threshold, 255, cv2.THRESH_BINARY_INV)
 
-    # Step 3: Morphological Operations
-    close_kernel = np.ones((close_kernel_size, close_kernel_size), np.uint8)
-    open_kernel = np.ones((open_kernel_size, open_kernel_size), np.uint8)
-    binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, close_kernel)  # Close gaps
-    binary_opened = cv2.morphologyEx(binary_closed, cv2.MORPH_OPEN, open_kernel)   # Remove noise
-    
-    if show_steps:
-        plt.figure(figsize=(12, 8))
-        plt.subplot(1, 4, 1)
-        plt.title("Original Image")
-        plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
-        plt.subplot(1, 4, 2)
-        plt.title("Grayscale Image")
-        plt.imshow(gray, cmap="gray")
-        plt.subplot(1, 4, 3)
-        plt.title("Blurred Image")
-        plt.imshow(blurred, cmap="gray")
-        plt.subplot(1, 4, 4)
-        plt.title("Binary Image")
-        plt.imshow(binary_opened, cmap="gray")
-        plt.show()
-    
+        # Step 3: Morphological Operations
+        close_kernel = np.ones((close_kernel_size, close_kernel_size), np.uint8)
+        open_kernel = np.ones((open_kernel_size, open_kernel_size), np.uint8)
+        binary_closed = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, close_kernel)  # Close gaps
+        binary_opened = cv2.morphologyEx(binary_closed, cv2.MORPH_OPEN, open_kernel)   # Remove noise
+        
+        thresholded_image = binary_opened
+        
+        if show_steps:
+            plt.figure(figsize=(24, 16))
+            plt.subplot(1, 4, 1)
+            plt.title("Original Image")
+            plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
+            plt.subplot(1, 4, 2)
+            plt.title("Grayscale Image")
+            plt.imshow(gray, cmap="gray")
+            plt.subplot(1, 4, 3)
+            plt.title("Blurred Image")
+            plt.imshow(blurred, cmap="gray")
+            plt.subplot(1, 4, 4)
+            plt.title("Binary Image")
+            plt.imshow(binary_opened, cmap="gray")
+            plt.tight_layout()
+            plt.show()
+        
+    elif segment_type == 'edges':
+        # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Apply histogram equalization
+        equalized = cv2.equalizeHist(gray)
+
+        # Apply bilateral filtering
+        bilateral_filtered = cv2.bilateralFilter(equalized, d=9, sigmaColor=75, sigmaSpace=75)
+
+        # Apply Canny edge detection
+        edges = cv2.Canny(bilateral_filtered, 10, 50)
+        
+        # Step 2: Edge Detection
+        edges = cv2.Canny(equalized, edges_thresholds[0], edges_thresholds[1])
+
+        # Step 3: Morphological Operations
+        # dilate edges
+        kernel = np.ones((5, 5), np.uint8)
+        edges = cv2.dilate(edges, kernel, iterations=1)
+        # erode edges
+        edges = cv2.erode(edges, kernel, iterations=1)
+        
+        thresholded_image = edges
+        
+        if show_steps:
+            plt.figure(figsize=(12, 8))
+            plt.subplot(1, 3, 1)
+            plt.title("Original Image")
+            plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
+            # plt.subplot(1, 3, 2)
+            # plt.title("Blurred Image")
+            # plt.imshow(blurred, cmap="gray")
+            plt.subplot(1, 3, 3)
+            plt.title("Edges Image")
+            plt.imshow(edges, cmap="gray")
+            plt.show()
+        
+    elif segment_type == 'hsv':
+        # Step 1: Convert to HSV
+        hsv_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2HSV)
+
+        # Step 2: Thresholding
+        lower_hsv = np.array([0, 50, 50])
+        upper_hsv = np.array([10, 255, 255])
+        mask = cv2.inRange(hsv_image, lower_hsv, upper_hsv)
+        
+        # Step 3: Morphological Operations
+        close_kernel = np.ones((close_kernel_size, close_kernel_size), np.uint8)
+        open_kernel = np.ones((open_kernel_size, open_kernel_size), np.uint8)
+        mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, close_kernel)
+        mask_opened = cv2.morphologyEx(mask_closed, cv2.MORPH_OPEN, open_kernel)   # Remove noise
+        
+        thresholded_image = mask_opened
 
     # Step 4: Contour Detection
-    contours, heirarchy = cv2.findContours(binary_opened, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, heirarchy = cv2.findContours(thresholded_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     print(f"Number of contours detected: {len(contours)}")
     
     # Visualize All Detected Contours
@@ -233,6 +317,10 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         for i, contour in enumerate(contours):
             area = cv2.contourArea(contour)
             print(f"Contour {i}: Area = {area}")
+            
+            # show only if area is above a certain threshold
+            if area < 10000:
+                continue
 
             # Create a mask for the current contour
             mask = np.zeros_like(gray)
