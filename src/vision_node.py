@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/home/snaak/Documents/manipulation_ws/src/snaak_vision/.venv/bin/python3
+
+# Change above line if chaning .venv location
 # author: Oliver
 import rclpy
 from rclpy.node import Node
@@ -9,6 +11,7 @@ from snaak_vision.srv import GetXYZFromImage
 import traceback
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
+from PIL import Image as Im
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -270,11 +273,17 @@ class VisionNode(Node):
                 if self.use_SAM:
                     mask = self.cheese_segment_generator.get_top_cheese_slice(image)
                 elif self.use_UNet:
-                    mask = self.Cheese_UNet.get_top_layer_binary(image, [250, 250, 55])
+                    mask = np.array(self.Cheese_UNet.get_top_layer_binary(Im.fromarray(image), [250, 250, 55]))
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
                     raise Exception("No segmentation method chosen")
                 
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
+                    mask
+                )
+
                 self.get_logger().info(f"Max value in mask {np.max(mask)}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == 1 or mask == 255)
@@ -284,11 +293,7 @@ class VisionNode(Node):
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
-                # Save images for debugging
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
-                    mask * 255,
-                )
+                
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
                     image,
