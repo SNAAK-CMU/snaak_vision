@@ -11,7 +11,7 @@ from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_h
 
 TRAY_BOX_PIX = (250, 20, 630, 300)  # xmin, ymin, xmax, ymax
 HSV_LOWER_BOUND = (10, 30, 100)
-HSV_UPPER_BOUND = (120, 255, 255)
+HSV_UPPER_BOUND = (40, 255, 255)
 
 #########################################
 
@@ -38,7 +38,10 @@ class BreadSegmentGenerator:
             cropped_image, self.hsv_lower_bound, self.hsv_upper_bound
         )
 
-        cv2.imwrite("/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/hsv_mask.jpg", mask)
+        cv2.imwrite(
+            "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/hsv_mask.jpg",
+            mask,
+        )
 
         kernel = np.ones((5, 5), np.uint8)
         opened_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
