@@ -8,7 +8,7 @@ class PlateBreadSegementGenerator():
     def __init__(self):
         self.lower_blue = np.array([90,40,40])
         self.upper_blue = np.array([150,255,255]) 
-        self.center_distance_thresh = 20
+        self.center_distance_thresh = 10
 
     def get_bread_pickup_point(self, image):
         '''

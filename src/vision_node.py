@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/home/snaak/Documents/manipulation_ws/src/snaak_vision/.venv/bin/python3
+
+# Change above line if chaning .venv location
 # author: Oliver
 import rclpy
 from rclpy.node import Node
@@ -23,7 +25,7 @@ from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
-from segmentation.segment_utils import calc_bbox_from_mask
+from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point
 
 ############### Parameters #################
 
@@ -311,7 +313,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_plate_img.jpg",
                     image,
                 )
 
@@ -351,6 +353,8 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
+            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id)
+            if not is_reachable: raise Exception("Pickup point not within bin")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
@@ -366,7 +370,7 @@ class VisionNode(Node):
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
 
-        # image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+        
         image = self.rgb_image
         self.get_logger().info(
             f"Handle Place Point Called with location ID: {location_id}"
@@ -399,12 +403,13 @@ class VisionNode(Node):
             )
 
         if location_id == ASSEMBLY_BREAD_ID:
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Segmenting Bread")
             mask = self.bread_segment_generator.get_bread_mask(image)
             self.get_logger().info(f"Bread segmentation completed")
 
             # Average the positions of white points to get center
-            y_coords, x_coords = np.where(mask == 1)
+            y_coords, x_coords = np.where(mask == 255)
             cam_x = int(np.mean(x_coords))
             cam_y = int(np.mean(y_coords))
 
@@ -412,7 +417,7 @@ class VisionNode(Node):
             cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                mask * 255,
+                mask,
             )
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
