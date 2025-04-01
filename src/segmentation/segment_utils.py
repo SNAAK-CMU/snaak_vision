@@ -249,17 +249,26 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         # Convert to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Apply histogram equalization
-        equalized = cv2.equalizeHist(gray)
+        # # Apply histogram equalization
+        # equalized = cv2.equalizeHist(gray)
+        
+        # Apply Gaussian blur
+        blurred = cv2.GaussianBlur(gray, (5,5), 0)
+        
+        # Adaptive thresholding
+        adaptive_thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+        
 
-        # Apply bilateral filtering
-        bilateral_filtered = cv2.bilateralFilter(equalized, d=9, sigmaColor=75, sigmaSpace=75)
-
-        # Apply Canny edge detection
-        edges = cv2.Canny(bilateral_filtered, 10, 50)
+        # # Apply bilateral filtering
+        # bilateral_filtered = cv2.bilateralFilter(equalized, d=9, sigmaColor=75, sigmaSpace=75)
+        
+        # Step 5: Morphological Operations
+        kernel = np.ones((5, 5), np.uint8)
+        closed = cv2.morphologyEx(adaptive_thresh, cv2.MORPH_CLOSE, kernel)
+        dilated = cv2.dilate(closed, kernel, iterations=2)
         
         # Step 2: Edge Detection
-        edges = cv2.Canny(equalized, edges_thresholds[0], edges_thresholds[1])
+        edges = cv2.Canny(closed, edges_thresholds[0], edges_thresholds[1])
 
         # Step 3: Morphological Operations
         # dilate edges
@@ -275,9 +284,9 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             plt.subplot(1, 3, 1)
             plt.title("Original Image")
             plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
-            # plt.subplot(1, 3, 2)
-            # plt.title("Blurred Image")
-            # plt.imshow(blurred, cmap="gray")
+            plt.subplot(1, 3, 2)
+            plt.title("Adaptive Threshold Image")
+            plt.imshow(adaptive_thresh, cmap="gray")
             plt.subplot(1, 3, 3)
             plt.title("Edges Image")
             plt.imshow(edges, cmap="gray")
@@ -319,7 +328,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             print(f"Contour {i}: Area = {area}")
             
             # show only if area is above a certain threshold
-            if area < 10000:
+            if area < 20000:
                 continue
 
             # Create a mask for the current contour
