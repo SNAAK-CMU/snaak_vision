@@ -1,9 +1,9 @@
 # Managing a submodule
 
 ## Meaning of Different Terms:
-1. Parent Repository: This repository
-2. Submodule: The src/segmentation/UNet folder in this repo
-3. Module: The original repository of the submodule
+1. **Parent Repository:** This repository
+2. **Submodule:** The src/segmentation/UNet folder in this repo
+3. **Module:** The original repository of the submodule
 
 ## Management Instructions:
 
@@ -35,8 +35,14 @@
 
 3. To make changes to the original module from the submodule directory (avoid):
     1. Navigate to submodule folder and update its state as per desired baseline, following steps in **2**.
-    2. Make changes, git add and git commit
-    3. Connect to <branch> and push changes:
+    2. Make changes, then run:
+        
+        ```bash 
+        git add 
+        git commit -m "<commit message> (from submodule in <parent_repository>)"
+        ```
+
+    3. Connect to a branch and push changes:
 
         ```bash
         git push origin HEAD:<branch>
