@@ -18,7 +18,9 @@ def generate_launch_description():
             'camera_name': 'camera',
             'device_type': 'd405',
             'enable_color': 'true',
-            'enable_depth': 'true'
+            'enable_depth': 'true',
+            'depth_module.enable_auto_exposure': 'false',
+            'depth_module.exposure': '15000'
         }.items()
     )
 
