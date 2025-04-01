@@ -7,25 +7,43 @@
     git submodule update
     ```
 
-    This pulls changes from whatever detached HEAD the submodule is currently in
+    This pulls changes from whatever detached HEAD the submodule is currently in, **not the latest state of the original module**
 
-    To checkout to a specific branch in the submodule's original repo:
+3. To checkout to a specific branch in the original module's repo and get its latest state:
 
     ```bash
     git checkout "branch"
+    git pull
     ```
 
-3. to make changes to the UNet repo
-    1. make changes in src/unet
-    2. add and commit
-    3. connect to local branch and push changes:
+    To update this submodule to the latest state of the original module as pulled above:
+
+    ```bash
+    cd ../
+    git submodule update
+    git add <submodule_folder>
+    git commit -m "updated <submodule> from <branch>"
+    git pull
+    git push
+    ```
+
+3. To make changes to the original module:
+    1. cd to submodule folder and update its state as desired, following steps in **2**.
+    2. make changes, git add and git commit
+    3. connect to <branch> and push changes:
+
+        ```bash
+        git push origin HEAD:<branch>
+        ```
+        
+        example:
 
         ```bash
         git push origin HEAD:local
         ```
 
         This will push changes to 'local' branch in submodule repo and detach
-    4. cd into src directory and run
+    4. cd outside the submodule directory and run:
 
         ```bash
         git submodule update

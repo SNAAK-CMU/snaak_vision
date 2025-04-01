@@ -1,0 +1,3 @@
+[submodule "src/segmentation/UNet"]
+	path = src/segmentation/UNet
+	url = https://github.com/SNAAK-CMU/UNet
