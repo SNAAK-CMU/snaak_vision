@@ -25,6 +25,8 @@ from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerat
 from segmentation.meat_segment_generator import MeatSegmentGenerator
 from segmentation.segment_utils import calc_bbox_from_mask
 
+from segmentation.UNet.ingredients_UNet import Ingredients_UNet
+
 ############### Parameters #################
 
 # Make these config
@@ -45,11 +47,16 @@ class VisionNode(Node):
         self.rgb_image = None
 
         # init segmentation objects
+        self.use_SAM = False
         self.cheese_segment_generator = CheeseSegmentGenerator()
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
         self.plate_bread_segment_generator = PlateBreadSegementGenerator()
         self.meat_segment_generator = MeatSegmentGenerator()
+
+        # init UNet
+        self.use_UNet = True
+        self.Cheese_UNet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/best_epoch_weights.pth", mix_type=1)
 
         # init control variables
         self.assembly_tray_box = None
@@ -259,12 +266,18 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting cheese")
 
-                # Get X, Y using SAM
-                mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                # Get binary mask
+                if self.use_SAM:
+                    mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                elif self.use_UNet:
+                    mask = self.Cheese_UNet.get_top_layer_binary(image, [250, 250, 55])
+                else:
+                    self.get_logger().info("Neither SAM nor UNet were chosen")
+                    raise Exception("No segmentation method chosen")
+                
                 self.get_logger().info(f"Max value in mask {np.max(mask)}")
-
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
+                # Average the true pixels in binary mask to get center X, Y
+                y_coords, x_coords = np.where(mask == 1 or mask == 255)
                 cam_x = int(np.mean(x_coords))
                 cam_y = int(np.mean(y_coords))
 
