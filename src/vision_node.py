@@ -59,7 +59,12 @@ class VisionNode(Node):
 
         # init UNet
         self.use_UNet = True
-        self.Cheese_UNet = Ingredients_UNet(count=False, classes=["background","top_cheese","other_cheese"], model_path="logs/cheese/best_epoch_weights.pth", mix_type=1)
+        self.Cheese_UNet = Ingredients_UNet(
+            count=False,
+            classes=["background", "top_cheese", "other_cheese"],
+            model_path="logs/cheese/best_epoch_weights.pth", #choose weights
+            mix_type=1,
+        )
 
         # init control variables
         self.assembly_tray_box = None
@@ -253,17 +258,16 @@ class VisionNode(Node):
         return point_base_link
 
     def handle_pickup_point(self, request, response):
-        bin_id = request.location_id
-        timestamp = request.timestamp  # use this to sync
-        image = self.rgb_image
-
-        self.get_logger().info(f"{image.shape}")
-        image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-
-        self.get_logger().info(f"Bin ID: {bin_id}")
-        # self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
-
         try:
+            bin_id = request.location_id
+            timestamp = request.timestamp  # use this to sync
+            image = self.rgb_image
+
+            self.get_logger().info(f"{image.shape}")
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+
+            self.get_logger().info(f"Bin ID: {bin_id}")
+            # self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
             if bin_id == CHEESE_BIN_ID:
                 # Cheese
 
@@ -271,31 +275,46 @@ class VisionNode(Node):
 
                 # Get binary mask
                 if self.use_SAM:
+                    self.get_logger().info("Saved Input Image")
                     mask = self.cheese_segment_generator.get_top_cheese_slice(image)
+                    self.get_logger().info("Got mask from SAM")
                 elif self.use_UNet:
-                    mask = np.array(self.Cheese_UNet.get_top_layer_binary(Im.fromarray(image), [250, 250, 55]))
+                    # PIL stores images as RGB, OpenCV stores as BGR
+                    # TODO: change UNet to work with cv2 images
+                    unet_input_image = self.rgb_image 
+                    mask = np.array(
+                        self.Cheese_UNet.get_top_layer_binary(
+                            Im.fromarray(unet_input_image), [250, 250, 55]
+                        )
+                    ) #TODO: handle cases when we get two top slices
+                    #TODO: handle case where there is a top slice outside the bin
+                    self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
                     raise Exception("No segmentation method chosen")
-                
+
                 # Save images for debugging
                 cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                    image,
+                )
+                cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
-                    mask
+                    mask,
                 )
 
-                self.get_logger().info(f"Max value in mask {np.max(mask)}")
+                mask_truth_value = np.max(mask) # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
+                self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
-                y_coords, x_coords = np.where(mask == 1 or mask == 255)
+                y_coords, x_coords = np.where(mask == mask_truth_value)
                 cam_x = int(np.mean(x_coords))
                 cam_y = int(np.mean(y_coords))
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
-                
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_point.jpg",
                     image,
                 )
 
