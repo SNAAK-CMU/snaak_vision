@@ -6,7 +6,7 @@ import numpy as np
 
 class PlateBreadSegementGenerator():
     def __init__(self):
-        self.lower_blue = np.array([90,40,40])
+        self.lower_blue = np.array([105,40,40])
         self.upper_blue = np.array([150,255,255]) 
         self.center_distance_thresh = 10
 
@@ -51,10 +51,19 @@ class PlateBreadSegementGenerator():
                 # m01: Sum of the y-coordinates weighted by pixel intensities.
                 # centroid is given by m10 / m00
                 cX = int(M["m10"] / M["m00"]) 
-                cY = int(M["m01"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])                
+                #cv2.circle(image, (cX, cY), 5, (255, 0, 255), -1)
+
                 cv2.drawContours(image, [approx], -1, (0, 255, 0), 3) 
-                bottom_y = np.max(cnt[:, 0, 1])
-                top_y = cY * 2
+                bottom_y = -1
+                for point in cnt: 
+                    x, y = point[0]
+                    if abs(x - cX) <= self.center_distance_thresh:
+                        bottom_y = max(y, bottom_y)
+                if bottom_y == -1: 
+                    bottom_y = np.max(cnt[:, 0, 1])
+
+                top_y = cY - (bottom_y - cY) / 2
 
                 # Because of arcs in bread, center y point can be unreliable
                 # To fix, find lowest y point near midline of plate that is not on the bottom line, this will correspond
@@ -62,8 +71,7 @@ class PlateBreadSegementGenerator():
                 for point in cnt: 
                     x, y = point[0]
                     if abs(x - cX) <= self.center_distance_thresh and (y < bottom_y - (bottom_y - cY) / 4):
-                        top_y = y
-                        break
+                        top_y = max(y, top_y)
                 cY = int(top_y + (bottom_y - top_y) / 2)
 
                 return cX, cY, bottom_y
