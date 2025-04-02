@@ -36,4 +36,5 @@ def generate_launch_description():
             executable='vision_node.py',
             name='snaak_vision',
         ),
+
     ])
