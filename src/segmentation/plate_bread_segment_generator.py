@@ -6,7 +6,7 @@ import numpy as np
 
 class PlateBreadSegementGenerator():
     def __init__(self):
-        self.lower_blue = np.array([105,40,40])
+        self.lower_blue = np.array([100,40,40])
         self.upper_blue = np.array([150,255,255]) 
         self.center_distance_thresh = 10
 
@@ -28,17 +28,17 @@ class PlateBreadSegementGenerator():
         ret,thresh = cv2.threshold(gray,10,255,0)
         
         # crop image
-        height, width = thresh.shape[:2]
-        crop_height = 400
-        crop_width = 300
-        crop_y_start = (height - crop_height) // 2
-        crop_y_end = crop_y_start + crop_height
-        crop_x_start = (width - crop_width) // 2
-        crop_x_end = crop_x_start + crop_width
+        # Crop locations
+        top_left_crop = (390, 65)
+        #top_right_crop = (490, 65)
+        #bottom_left_crop = (390, 285)
+        bottom_right_crop = (490, 285)
         crop_mask = np.zeros_like(thresh)
+        crop_x_start, crop_y_start = top_left_crop
+        crop_x_end, crop_y_end = bottom_right_crop
+
         crop_mask[crop_y_start:crop_y_end, crop_x_start:crop_x_end] = 255
         thresh = cv2.bitwise_and(thresh, crop_mask)
-
 
         min_area = 3000
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
@@ -63,7 +63,7 @@ class PlateBreadSegementGenerator():
                 if bottom_y == -1: 
                     bottom_y = np.max(cnt[:, 0, 1])
 
-                top_y = cY - (bottom_y - cY) / 2
+                top_y = -1
 
                 # Because of arcs in bread, center y point can be unreliable
                 # To fix, find lowest y point near midline of plate that is not on the bottom line, this will correspond
@@ -73,6 +73,9 @@ class PlateBreadSegementGenerator():
                     if abs(x - cX) <= self.center_distance_thresh and (y < bottom_y - (bottom_y - cY) / 4):
                         top_y = max(y, top_y)
                 cY = int(top_y + (bottom_y - top_y) / 2)
+
+                if top_y  == -1: 
+                    cY - (bottom_y - cY) / 2
 
                 return cX, cY, bottom_y
         raise Exception("No suitable bread pickup point found")
