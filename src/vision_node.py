@@ -282,11 +282,11 @@ class VisionNode(Node):
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image 
-                    mask = np.array(
+                    mask, max_contour_mask = np.array(
                         self.Cheese_UNet.get_top_layer_binary(
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
-                    ) #TODO: handle cases when we get two top slices
+                    )
                     #TODO: handle case where there is a top slice outside the bin
                     self.get_logger().info("Got mask from UNet")
                 else:
@@ -301,6 +301,9 @@ class VisionNode(Node):
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg"
                 )
 
                 mask_truth_value = np.max(mask) # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
