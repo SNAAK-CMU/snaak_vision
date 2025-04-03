@@ -303,7 +303,7 @@ class VisionNode(Node):
                     mask,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg"
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg", max_contour_mask
                 )
 
                 mask_truth_value = np.max(mask) # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
