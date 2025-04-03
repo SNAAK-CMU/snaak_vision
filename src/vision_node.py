@@ -137,6 +137,8 @@ class VisionNode(Node):
         self.marker.color.g = 0.0
         self.marker.color.b = 0.0
 
+        self.get_logger().info("--- Node initialization completed successfully. ---")
+
     def tf_listener_callback_tf(self, msg):
         """Handle incoming transform messages."""
         try:
@@ -151,7 +153,7 @@ class VisionNode(Node):
 
     def depth_callback(self, msg):
         # Convert ROS Image message to OpenCV format
-        try:    
+        try:
             self.depth_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
             )
@@ -159,7 +161,7 @@ class VisionNode(Node):
             self.get_logger().error(
                 f"Failed to convert depth message to OpenCV format: {e}"
             )
-            self.rgb_image = 
+            self.rgb_image = None
 
     def rgb_callback(self, msg):
         try:
