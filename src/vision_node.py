@@ -307,6 +307,7 @@ class VisionNode(Node):
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
                     )
+                    mask = max_contour_mask # take largest mask as the chosen mask
                     # TODO: handle case where there is a top slice outside the bin
                     self.get_logger().info("Got mask from UNet")
                 else:
@@ -322,10 +323,10 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                    max_contour_mask,
-                )
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
+                #     max_contour_mask,
+                # )
 
                 mask_truth_value = np.max(
                     mask
