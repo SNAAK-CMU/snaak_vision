@@ -6,6 +6,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 
+############### Parameters #################
+
+SUCTION_CUP_RADIUS = 0.03
+# bottom left and top right point of bin in arm link0 frame
+BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
+BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)] 
+BIN3_PICKUP_AREA = [(0.177, -0.24), (0.307, -0.48)] 
+
+############################################
 
 def convert_mask_to_orig_dims(
     cropped_mask, orig_img, crop_xmin, crop_ymin, crop_xmax, crop_ymax
@@ -193,6 +202,28 @@ def keep_largest_blob(binary_image):
         largest_blob_image, [largest_contour], -1, 255, thickness=cv2.FILLED
     )
     return largest_blob_image
+
+def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
+    if (bin_id == 1):
+        pickup_area = BIN1_PICKUP_AREA
+    elif (bin_id == 2):
+        pickup_area = BIN2_PICKUP_AREA
+    elif (bin_id == 3):
+        pickup_area = BIN3_PICKUP_AREA
+    else:
+        raise Exception("Not a valid bin id")
+    
+    # bl -> bottom left, tr -> top right
+    bl_X, bl_Y = pickup_area[0]
+    tr_X, tr_Y = pickup_area[1] 
+
+    # Two y conditions since we can have negative y values, just want to make sure we are
+    # in between the bounds
+    r_cup = SUCTION_CUP_RADIUS
+    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y + r_cup <= Y_pickup <= tr_Y - r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
+        return True
+    else:
+        return False
 
 def contour_segmentation(image, binary_threshold=150, show_image=True, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='binary', edges_thresholds=(30, 50)):
      # can adjust the threshold values based on the image characteristics
