@@ -5,7 +5,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+from cv_bridge import CvBridge, CvBridgeError
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
 import traceback
@@ -62,7 +62,7 @@ class VisionNode(Node):
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
-            model_path="logs/cheese/best_epoch_weights.pth", #choose weights
+            model_path="logs/cheese/best_epoch_weights.pth",  # choose weights
             mix_type=1,
         )
 
@@ -139,20 +139,38 @@ class VisionNode(Node):
 
     def tf_listener_callback_tf(self, msg):
         """Handle incoming transform messages."""
-        for transform in msg.transforms:
-            if transform.child_frame_id and transform.header.frame_id:
-                self.transformations[
-                    (transform.header.frame_id, transform.child_frame_id)
-                ] = transform
+        try:
+            for transform in msg.transforms:
+                if transform.child_frame_id and transform.header.frame_id:
+                    self.transformations[
+                        (transform.header.frame_id, transform.child_frame_id)
+                    ] = transform
+        except Exception as e:
+            self.get_logger().error(f"Failed to get transform message: {e}.")
+            self.get_logger().error(f"Using previous transform")
 
     def depth_callback(self, msg):
         # Convert ROS Image message to OpenCV format
-        self.depth_image = self.bridge.imgmsg_to_cv2(
-            msg, desired_encoding="passthrough"
-        )
+        try:    
+            self.depth_image = self.bridge.imgmsg_to_cv2(
+                msg, desired_encoding="passthrough"
+            )
+        except CvBridgeError as e:
+            self.get_logger().error(
+                f"Failed to convert depth message to OpenCV format: {e}"
+            )
+            self.rgb_image = 
 
     def rgb_callback(self, msg):
-        self.rgb_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+        try:
+            self.rgb_image = self.bridge.imgmsg_to_cv2(
+                msg, desired_encoding="passthrough"
+            )
+        except CvBridgeError as e:
+            self.get_logger().error(
+                f"Failed to convert image message to OpenCV format: {e}"
+            )
+            self.rgb_image = None
 
     def camera_intrinsics_callback(self, msg):
         intrinsic_matrix = msg.k
@@ -281,13 +299,13 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
-                    unet_input_image = self.rgb_image 
+                    unet_input_image = self.rgb_image
                     mask, max_contour_mask = np.array(
                         self.Cheese_UNet.get_top_layer_binary(
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
                     )
-                    #TODO: handle case where there is a top slice outside the bin
+                    # TODO: handle case where there is a top slice outside the bin
                     self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
@@ -303,10 +321,13 @@ class VisionNode(Node):
                     mask,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg", max_contour_mask
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
+                    max_contour_mask,
                 )
 
-                mask_truth_value = np.max(mask) # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
+                mask_truth_value = np.max(
+                    mask
+                )  # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
                 self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == mask_truth_value)
@@ -392,7 +413,8 @@ class VisionNode(Node):
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
             is_reachable = is_valid_pickup_point(response.x, response.y, bin_id)
-            if not is_reachable: raise Exception("Pickup point not within bin")
+            if not is_reachable:
+                raise Exception("Pickup point not within bin")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
@@ -408,7 +430,6 @@ class VisionNode(Node):
         timestamp = request.timestamp  # use this to sync
         depth_image = self.depth_image
 
-        
         image = self.rgb_image
         self.get_logger().info(
             f"Handle Place Point Called with location ID: {location_id}"
