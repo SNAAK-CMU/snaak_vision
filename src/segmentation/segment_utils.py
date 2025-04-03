@@ -8,7 +8,7 @@ import cv2
 
 ############### Parameters #################
 
-SUCTION_CUP_RADIUS = 0.03
+SUCTION_CUP_RADIUS = 0.03 * 1.5 # * 1.5 for buffer
 # bottom left and top right point of bin in arm link0 frame
 BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
 BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)] 
