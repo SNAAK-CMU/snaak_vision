@@ -26,7 +26,7 @@ from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
-from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point
+from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point, is_point_within_bounds, get_averaged_depth
 
 from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 
@@ -190,30 +190,23 @@ class VisionNode(Node):
             self.get_logger().warn("Depth image not available yet!")
             return float("nan")
 
-        try:
-            # Ensure coordinates are within bounds of the image dimensions
-            if (
-                x < 0
-                or x >= self.depth_image.shape[1]
-                or y < 0
-                or y >= self.depth_image.shape[0]
-            ):
-                raise ValueError("Coordinates out of bounds")
+        # Ensure coordinates are within bounds of the image dimensions
+        if not is_point_within_bounds(self.depth_image, x, y):
+            raise ValueError("Coordinates out of bounds")
 
-            # Retrieve depth value at (x, y)
-            self.get_logger().info(f"Getting Depth at ({x}, {y})")
-            depth = float(self.depth_image[y, x]) / 1000.0  # Convert mm to meters
-            self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
-            return depth
-        except Exception as e:
-            self.get_logger().error(f"Error retrieving depth: {e}")
-            return float("nan")
+        # Retrieve depth value at (x, y)
+        self.get_logger().info(f"Getting Depth at ({x}, {y})")
+
+        depth = get_averaged_depth(self.depth_image, x, y)
+        self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
 
     def handle_get_depth(self, request, response):
-        x = request.x
-        y = request.y
-        response.depth = self.get_depth(x, y)
-
+        try:
+            x = request.x
+            y = request.y
+            response.depth = self.get_depth(x, y)
+        except Exception as e:
+            response.depth = float("nan")
         return response
 
     def dehomogenize(self, point_h):
@@ -428,88 +421,96 @@ class VisionNode(Node):
         return response
 
     def handle_place_point(self, request, response):
-        location_id = request.location_id
-        timestamp = request.timestamp  # use this to sync
-        depth_image = self.depth_image
+        try:
+            location_id = request.location_id
+            timestamp = request.timestamp  # use this to sync
+            depth_image = self.depth_image
 
-        image = self.rgb_image
-        self.get_logger().info(
-            f"Handle Place Point Called with location ID: {location_id}"
-        )
-        self.get_logger().info(
-            f"Tray ID: {ASSEMBLY_TRAY_ID}, Bread ID: {ASSEMBLY_BREAD_ID}"
-        )
-
-        if location_id == ASSEMBLY_TRAY_ID:
-            self.get_logger().info(f"Segmenting tray")
-
-            mask = self.tray_segment_generator.get_tray_mask(image)
-
-            self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
-
-            # Average the positions of white points to get center
-            y_coords, x_coords = np.where(mask == 1)
-            cam_x = int(np.mean(x_coords))
-            cam_y = int(np.mean(y_coords))
-
-            # Save images for debugging
-            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_mask.jpg",
-                mask * 255,
+            image = self.rgb_image
+            self.get_logger().info(
+                f"Handle Place Point Called with location ID: {location_id}"
             )
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_img.jpg",
-                image,
+            self.get_logger().info(
+                f"Tray ID: {ASSEMBLY_TRAY_ID}, Bread ID: {ASSEMBLY_BREAD_ID}"
             )
 
-        if location_id == ASSEMBLY_BREAD_ID:
-            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-            self.get_logger().info(f"Segmenting Bread")
-            mask = self.bread_segment_generator.get_bread_mask(image)
-            self.get_logger().info(f"Bread segmentation completed")
+            if location_id == ASSEMBLY_TRAY_ID:
+                self.get_logger().info(f"Segmenting tray")
 
-            # Average the positions of white points to get center
-            y_coords, x_coords = np.where(mask == 255)
-            cam_x = int(np.mean(x_coords))
-            cam_y = int(np.mean(y_coords))
+                mask = self.tray_segment_generator.get_tray_mask(image)
 
-            # Save images for debugging
-            cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
-                mask,
+                self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
+
+                # Average the positions of white points to get center
+                y_coords, x_coords = np.where(mask == 1)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
+
+                # Save images for debugging
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_mask.jpg",
+                    mask * 255,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_img.jpg",
+                    image,
+                )
+
+            if location_id == ASSEMBLY_BREAD_ID:
+                image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+                self.get_logger().info(f"Segmenting Bread")
+                mask = self.bread_segment_generator.get_bread_mask(image)
+                self.get_logger().info(f"Bread segmentation completed")
+
+                # Average the positions of white points to get center
+                y_coords, x_coords = np.where(mask == 255)
+                cam_x = int(np.mean(x_coords))
+                cam_y = int(np.mean(y_coords))
+
+                # Save images for debugging
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                    mask,
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    image,
+                )
+
+            # get depth
+            cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+
+            # transform coordinates
+            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+
+            self.get_logger().info("got transform, applying it to point...")
+
+            response.x = response_transformed[0]
+            response.y = response_transformed[1]
+            response.z = response_transformed[2]
+
+            self.get_logger().info(
+                f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
-            cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
-                image,
-            )
 
-        # get depth
-        cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+            # publish point to topic
+            self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
 
-        # transform coordinates
-        response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+            # Get the current time and set it in the header
+            self.marker.header.stamp = self.get_clock().now().to_msg()
 
-        self.get_logger().info("got transform, applying it to point...")
+            # Publish the marker
+            self.marker_pub.publish(self.marker)
+            self.get_logger().info("Published point to RViz")
 
-        response.x = response_transformed[0]
-        response.y = response_transformed[1]
-        response.z = response_transformed[2]
-
-        self.get_logger().info(
-            f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-        )
-
-        # publish point to topic
-        self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
-
-        # Get the current time and set it in the header
-        self.marker.header.stamp = self.get_clock().now().to_msg()
-
-        # Publish the marker
-        self.marker_pub.publish(self.marker)
-        self.get_logger().info("Published point to RViz")
+        except Exception as e:
+            self.get_logger().error(f"Error while calculating place point: {e}")
+            self.get_logger().error(traceback.print_exc())
+            response.x = -1.0
+            response.y = -1.0
+            response.z = float("nan")
 
         return response
 
