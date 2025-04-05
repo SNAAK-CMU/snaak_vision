@@ -177,7 +177,7 @@ def keep_largest_blob(binary_image):
     )
     return largest_blob_image
 
-def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
+def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id):
     if (bin_id == 1):
         pickup_area = BIN1_PICKUP_AREA
     elif (bin_id == 2):
@@ -191,10 +191,15 @@ def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
     bl_X, bl_Y = pickup_area[0]
     tr_X, tr_Y = pickup_area[1] 
 
+    r_cup = SUCTION_CUP_RADIUS
+    if bin_id == bread_bin_id:
+        tr_Y += 0.1 
+        # need to account for camera, but not cup on far right side (this offsets addition below)
+        tr_Y -= r_cup
+
     # Two y conditions since we can have negative y values, just want to make sure we are
     # in between the bounds
-    r_cup = SUCTION_CUP_RADIUS
-    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y + r_cup <= Y_pickup <= tr_Y - r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
+    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y - r_cup <= Y_pickup <= tr_Y + r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
         return True
     else:
         return False

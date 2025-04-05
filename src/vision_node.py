@@ -408,7 +408,7 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
-            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id)
+            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id, BREAD_BIN_ID)
             if not is_reachable:
                 raise Exception("Pickup point not within bin")
 
