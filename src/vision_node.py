@@ -199,6 +199,7 @@ class VisionNode(Node):
 
         depth = get_averaged_depth(self.depth_image, x, y)
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
+        return depth
 
     def handle_get_depth(self, request, response):
         try:
@@ -206,7 +207,7 @@ class VisionNode(Node):
             y = request.y
             response.depth = self.get_depth(x, y)
         except Exception as e:
-            response.depth = float("nan")
+           response.depth = float("nan")
         return response
 
     def dehomogenize(self, point_h):
