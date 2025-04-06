@@ -5,14 +5,19 @@ import cv2
 
 
 class SandwichChecker:
-    def __init__(self):
-
+    def __init__(self, fov_width=0.775, fov_height=0.435, threshold_in_cm=3, image_width=848, image_height=480):
         self.min_tray_area = 125000
         self.max_tray_area = 127000
         self.min_bread_area = 27000
         self.max_bread_area = 38000
         self.min_cheese_area = 25000
         self.max_cheese_area = 28000
+        
+        self.fov_width = fov_width
+        self.fov_height = fov_height
+        self.threshold_in_cm = threshold_in_cm
+        
+        self.pass_threshold = 0 # default initial value
 
         self.tray_contours = []
 
@@ -26,6 +31,20 @@ class SandwichChecker:
         self.ham_centers = []
 
         self.place_images = []
+        
+    def calc_threshold(self):
+        """
+        Set the threshold for checking ingredient placement.
+        Args:
+            threshold (int): threshold pixel distance between ingredient and bread centers
+        """
+        self.image_width = self.image_width
+        self.image_height = self.image_height
+        # Calculate the threshold based on the image size
+        pixel_m_ratio = ((self.fov_width / self.image_width) + (self.fov_height / self.image_height))/2
+        # Set the threshold based on the pixel/cm ratio
+        self.pass_threshold = pixel_m_ratio * (self.threshold_in_cm / 100)
+        print(f"Threshold: {self.pass_threshold} pixels") 
 
     def reset(self):
         self.tray_contours = []
@@ -109,7 +128,7 @@ class SandwichChecker:
 
         return bread_on_tray, image
 
-    def check_cheese(self, image, threshold):
+    def check_cheese(self, image):
         """
         Extract cheese contours and their centers from the image.
         Threshold distace between cheese and bread centers.
@@ -160,7 +179,7 @@ class SandwichChecker:
                     (bread_center[0] - cheese_center[0]) ** 2
                     + (bread_center[1] - cheese_center[1]) ** 2
                 ) ** 0.5
-                if distance < threshold:
+                if distance < self.pass_threshold:
                     print(
                         f"Euclidean distance between bread and cheese centers: {distance}"
                     )
@@ -181,11 +200,14 @@ class SandwichChecker:
         
         return valid_cheese, image  # if no cheese is placed in tray or cheese is not close to bread
 
-    def check_ingredient(self, image, ingredient_name, threshold=0):
+    def check_ham(self, image):
+        pass
+    
+    def check_ingredient(self, image, ingredient_name): 
         if ingredient_name == "bread":
             return self.check_bread(image)
         elif ingredient_name == "cheese":
-            return self.check_cheese(image, threshold)
+            return self.check_cheese(image)
         elif ingredient_name == "ham":
             # TODO: implement ham check
             pass
@@ -213,7 +235,7 @@ if __name__ == "__main__":
     # )
     
     # Check cheese placement
-    # cheese_check, cheese_check_image = SandwichChecker.check_cheese(cheese_place_image, threshold=50)
+    # cheese_check, cheese_check_image = SandwichChecker.check_cheese(cheese_place_image)
     
     # # visualize cheese placement
     # cv2.imshow("Cheese Check", cheese_check_image)
@@ -225,7 +247,7 @@ if __name__ == "__main__":
     )
     
     # Check cheese placement
-    cheese_check, cheese_check_image = SandwichChecker.check_cheese(two_cheese_place_image, threshold=50)
+    cheese_check, cheese_check_image = SandwichChecker.check_cheese(two_cheese_place_image)
     
     # visualize cheese placement
     cv2.imshow("Two Cheese Check", cheese_check_image)

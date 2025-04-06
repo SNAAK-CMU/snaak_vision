@@ -8,6 +8,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
+from snaak_vision.srv import CheckIngredientPlace
+from std_srvs.srv import Trigger
 import traceback
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
@@ -26,9 +28,16 @@ from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
-from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point, is_point_within_bounds, get_averaged_depth
+from segmentation.segment_utils import (
+    calc_bbox_from_mask,
+    is_valid_pickup_point,
+    is_point_within_bounds,
+    get_averaged_depth,
+)
 
 from segmentation.UNet.ingredients_UNet import Ingredients_UNet
+
+from sandwich_checker import SandwichChecker
 
 ############### Parameters #################
 
@@ -49,6 +58,15 @@ class VisionNode(Node):
         self.depth_image = None
         self.rgb_image = None
 
+        # camera FOV over assembly area
+        self.fov_w = 0.775
+        self.fov_h = 0.435
+        self.threshold_in_cm = 3
+
+        # image size
+        self.image_width = 848
+        self.image_height = 480
+
         # init segmentation objects
         self.use_SAM = False
         self.cheese_segment_generator = CheeseSegmentGenerator()
@@ -66,6 +84,16 @@ class VisionNode(Node):
             mix_type=1,
         )
 
+        # init sandwich checker
+        self.sandwich_checker = SandwichChecker(
+            fov_height=self.fov_h,
+            fov_width=self.fov_w,
+            threshold_in_cm=self.threshold_in_cm,
+            image_width=self.image_width,
+            image_height=self.image_height,
+        )
+        self.sandwich_checker.calc_threshold()
+        
         # init control variables
         self.assembly_tray_box = None
         self.assembly_bread_xyz_base = None
@@ -99,6 +127,19 @@ class VisionNode(Node):
             GetXYZFromImage,
             self.get_name() + "/get_place_point",
             self.handle_place_point,
+        )
+
+        # Create sandwich checker service server
+        self.sandwich_checker_service = self.create_service(
+            CheckIngredientPlace,
+            self.get_name() + "/check_ingredient",
+            self.handle_sandwich_check,
+        )
+
+        self.sandwich_check_reset_service = self.create_service(
+            Trigger,
+            self.get_name() + "/reset_sandwich_checker",
+            self.handle_sandwich_check_reset,
         )
 
         self.subscription_tf = self.create_subscription(
@@ -201,13 +242,45 @@ class VisionNode(Node):
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
         return depth
 
+    def handle_sandwich_check(self, request, response):
+        try:
+            ingredient_name = request.ingredient_name
+            image = self.rgb_image
+            self.get_logger().info(f"Checking ingredient: {ingredient_name}")
+            ingredient_check, check_image = self.sandwich_checker.check_ingredient(
+                image=image, ingredient_name=ingredient_name, threshold=50
+            )
+            self.get_logger().info(
+                f"{ingredient_name} check result: {ingredient_check}"
+            )
+            response.ingredient_check = ingredient_check
+            # TODO: do something with check_image
+        except Exception as e:
+            self.get_logger().error(f"Error while checking ingredient: {e}")
+            self.get_logger().error(traceback.print_exc())
+            ingredient_check = False
+            response.ingredient_check = ingredient_check
+        return response
+
+    def handle_sandwich_check_reset(self, request, response):
+        try:
+            self.sandwich_checker.reset()
+            response.success = True
+            response.message = "Sandwich checker reset successfully"
+        except Exception as e:
+            self.get_logger().error(f"Error while resetting sandwich checker: {e}")
+            response.success = False
+            response.message = "Failed to reset sandwich checker"
+        return response
+
     def handle_get_depth(self, request, response):
         try:
             x = request.x
             y = request.y
             response.depth = self.get_depth(x, y)
         except Exception as e:
-           response.depth = float("nan")
+            response.depth = float("nan")
+            self.get_logger().error(f"Error while getting depth: {e}")
         return response
 
     def dehomogenize(self, point_h):
@@ -408,7 +481,9 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
-            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id, BREAD_BIN_ID)
+            is_reachable = is_valid_pickup_point(
+                response.x, response.y, bin_id, BREAD_BIN_ID
+            )
             if not is_reachable:
                 raise Exception("Pickup point not within bin")
 
