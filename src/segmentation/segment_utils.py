@@ -342,7 +342,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
 
     # Step 4: Contour Detection
     contours, heirarchy = cv2.findContours(thresholded_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    print(f"Number of contours detected: {len(contours)}")
+    #print(f"Number of contours detected: {len(contours)}")
     
     # Visualize All Detected Contours
     if show_image:
