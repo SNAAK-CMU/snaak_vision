@@ -48,6 +48,13 @@ BREAD_BIN_ID = 3
 ASSEMBLY_TRAY_ID = 4
 ASSEMBLY_BREAD_ID = 5
 
+FOV_WIDTH = 0.775  # metres
+FOV_HEIGHT = 0.435  # metres
+SW_CHECKER_THRESHOLD = 3  # cm
+
+IMG_WIDTH = 848
+IMG_HEIGHT = 480
+
 ############################################
 
 
@@ -59,13 +66,13 @@ class VisionNode(Node):
         self.rgb_image = None
 
         # camera FOV over assembly area
-        self.fov_w = 0.775 # metres
-        self.fov_h = 0.435
-        self.threshold_in_cm = 3
+        self.fov_w = FOV_WIDTH  # metres
+        self.fov_h = FOV_HEIGHT  # metres
+        self.threshold_in_cm = SW_CHECKER_THRESHOLD
 
         # image size
-        self.image_width = 848
-        self.image_height = 480
+        self.image_width = IMG_WIDTH
+        self.image_height = IMG_HEIGHT
 
         # init segmentation objects
         self.use_SAM = False
@@ -92,7 +99,7 @@ class VisionNode(Node):
             image_width=self.image_width,
             image_height=self.image_height,
         )
-        
+
         # init control variables
         self.assembly_tray_box = None
         self.assembly_bread_xyz_base = None
