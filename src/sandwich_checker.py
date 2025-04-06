@@ -16,8 +16,12 @@ class SandwichChecker:
         self.fov_width = fov_width
         self.fov_height = fov_height
         self.threshold_in_cm = threshold_in_cm
+        self.image_height = image_height
+        self.image_width = image_width
         
-        self.pass_threshold = 0 # default initial value
+        
+        self.pixel_to_m = ((self.fov_width / self.image_width) + (self.fov_height / self.image_height))/2
+        self.pass_threshold = self.pixel_to_m * (self.threshold_in_cm / 100)
 
         self.tray_contours = []
 
@@ -31,20 +35,6 @@ class SandwichChecker:
         self.ham_centers = []
 
         self.place_images = []
-        
-    def calc_threshold(self):
-        """
-        Set the threshold for checking ingredient placement.
-        Args:
-            threshold (int): threshold pixel distance between ingredient and bread centers
-        """
-        self.image_width = self.image_width
-        self.image_height = self.image_height
-        # Calculate the threshold based on the image size
-        pixel_m_ratio = ((self.fov_width / self.image_width) + (self.fov_height / self.image_height))/2
-        # Set the threshold based on the pixel/cm ratio
-        self.pass_threshold = pixel_m_ratio * (self.threshold_in_cm / 100)
-        print(f"Threshold: {self.pass_threshold} pixels") 
 
     def reset(self):
         self.tray_contours = []
@@ -52,6 +42,9 @@ class SandwichChecker:
 
         self.cheese_contours = []
         self.cheese_centers = []
+        
+        self.bread_centers = []
+        self.bread_contours = []
 
         self.ham_contours = []
         self.ham_centers = []
@@ -179,15 +172,12 @@ class SandwichChecker:
                     (bread_center[0] - cheese_center[0]) ** 2
                     + (bread_center[1] - cheese_center[1]) ** 2
                 ) ** 0.5
+                print(
+                        f"Euclidean distance between bread and cheese centers in m : {distance * self.pixel_to_m}" 
+                    )
                 if distance < self.pass_threshold:
-                    print(
-                        f"Euclidean distance between bread and cheese centers: {distance}"
-                    )
                     valid_cheese = True
-                else:
-                    print(
-                        f"Euclidean distance between bread and cheese centers: {distance}"
-                    )
+                    break
         
         # draw contours on image
         for contour in self.cheese_contours:
@@ -215,45 +205,82 @@ class SandwichChecker:
             raise ValueError(f"Unknown ingredient: {ingredient_name}")
 
 
-if __name__ == "__main__":    
-    SandwichChecker = SandwichChecker()
+if __name__ == "__main__":
+    # Testing
     
+    fov_width = 0.775
+    fov_height = 0.435
+    threshold_in_cm = 3
+    image_width = 848
+    image_height = 480
+    
+    # Initialize the SandwichChecker with the specified parameters
+    sandwich_checker = SandwichChecker(
+        fov_width=fov_width,
+        fov_height=fov_height,
+        threshold_in_cm=threshold_in_cm,
+        image_width=image_width,
+        image_height=image_height,
+    )
+    
+    # Load the image
     bread_place_image = cv2.imread(
         "/Users/abhi/Documents/CMU/2024-25/Projects/SNAAK/Vision/sandwich_check_data/cheese_assembly/image_20250323-161448.png"
     )
     
     # Check bread placement
-    bread_check, bread_check_image = SandwichChecker.check_bread(bread_place_image)
+    bread_check, bread_check_image = sandwich_checker.check_ingredient(
+        bread_place_image, "bread"
+    )
     
     # visualize bread placement
     cv2.imshow("Bread Check", bread_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     
-    # cheese_place_image = cv2.imread(
-    #     "/Users/abhi/Documents/CMU/2024-25/Projects/SNAAK/Vision/sandwich_check_data/cheese_ham_assembly/image_20250323-162333.png"
-    # )
-    
-    # Check cheese placement
-    # cheese_check, cheese_check_image = SandwichChecker.check_cheese(cheese_place_image)
-    
-    # # visualize cheese placement
-    # cv2.imshow("Cheese Check", cheese_check_image)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    
     two_cheese_place_image = cv2.imread(
         "/Users/abhi/Documents/CMU/2024-25/Projects/SNAAK/Vision/sandwich_check_data/cheese_assembly/image_20250323-161745.png"
     )
     
     # Check cheese placement
-    cheese_check, cheese_check_image = SandwichChecker.check_cheese(two_cheese_place_image)
+    cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
+        two_cheese_place_image, "cheese"
+    )
     
     # visualize cheese placement
     cv2.imshow("Two Cheese Check", cheese_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     
+    # reset
+    sandwich_checker.reset()
     
+    # Load new bread image
+    bread_place_image_2 = cv2.imread(
+        "/Users/abhi/Documents/CMU/2024-25/Projects/SNAAK/Vision/sandwich_check_data/cheese_ham_assembly/image_20250323-162330.png"
+    )
     
-
+    # Check bread placement
+    bread_check, bread_check_image = sandwich_checker.check_ingredient(
+        bread_place_image_2, "bread"
+    )
+    
+    # visualize bread placement
+    cv2.imshow("Bread Check", bread_check_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    
+    # Load new cheese image
+    cheese_place_image = cv2.imread(
+        "/Users/abhi/Documents/CMU/2024-25/Projects/SNAAK/Vision/sandwich_check_data/cheese_ham_assembly/image_20250323-162333.png"
+    )
+    
+    # Check cheese placement
+    cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
+        cheese_place_image, "cheese"
+    )
+    
+    # visualize cheese placement
+    cv2.imshow("Cheese Check", cheese_check_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()

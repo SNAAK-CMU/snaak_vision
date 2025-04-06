@@ -59,7 +59,7 @@ class VisionNode(Node):
         self.rgb_image = None
 
         # camera FOV over assembly area
-        self.fov_w = 0.775
+        self.fov_w = 0.775 # metres
         self.fov_h = 0.435
         self.threshold_in_cm = 3
 
@@ -92,7 +92,6 @@ class VisionNode(Node):
             image_width=self.image_width,
             image_height=self.image_height,
         )
-        self.sandwich_checker.calc_threshold()
         
         # init control variables
         self.assembly_tray_box = None
