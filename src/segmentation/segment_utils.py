@@ -8,7 +8,7 @@ import cv2
 
 ############### Parameters #################
 
-SUCTION_CUP_RADIUS = 0.03
+SUCTION_CUP_RADIUS = 0.03 * 1.5 # * 1.5 for buffer
 # bottom left and top right point of bin in arm link0 frame
 BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
 BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)] 
@@ -203,7 +203,7 @@ def keep_largest_blob(binary_image):
     )
     return largest_blob_image
 
-def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
+def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id):
     if (bin_id == 1):
         pickup_area = BIN1_PICKUP_AREA
     elif (bin_id == 2):
@@ -217,10 +217,15 @@ def is_valid_pickup_point(X_pickup, Y_pickup, bin_id):
     bl_X, bl_Y = pickup_area[0]
     tr_X, tr_Y = pickup_area[1] 
 
+    r_cup = SUCTION_CUP_RADIUS
+    if bin_id == bread_bin_id:
+        tr_Y += 0.1 
+        # need to account for camera, but not cup on far right side (this offsets addition below)
+        tr_Y -= r_cup
+
     # Two y conditions since we can have negative y values, just want to make sure we are
     # in between the bounds
-    r_cup = SUCTION_CUP_RADIUS
-    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y + r_cup <= Y_pickup <= tr_Y - r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
+    if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (bl_Y - r_cup <= Y_pickup <= tr_Y + r_cup or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup):
         return True
     else:
         return False
@@ -419,3 +424,35 @@ def difference_mask(image1, image2, thresh):
 
 
     return thresholded_diff
+
+def is_point_within_bounds(img, x, y):
+    if (
+            x < 0
+            or x >= img.shape[1]
+            or y < 0
+            or y >= img.shape[0]
+    ):
+        return False
+    else:
+        return True
+    
+def get_averaged_depth(depth_image, x, y, kernel_size = 3):
+    # Do an average of the kernel_sizexkernel_size window around x, y
+    y_min = max(0, y - kernel_size // 2)
+    y_max = min(depth_image.shape[0], y + kernel_size // 2)
+    x_min = max(0, x - kernel_size // 2)
+    x_max = min(depth_image.shape[1], x + kernel_size // 2)
+
+
+    depth_window = depth_image[y_min:y_max, x_min:x_max]
+
+    # Only use nonzero (valid, points)
+    valid_window = (depth_window > 0).astype(int)
+    total_sum = np.sum(depth_window)
+    num_valid_points = np.sum(valid_window)
+
+    if num_valid_points == 0:
+        raise Exception("No valid depth value found")
+    
+    depth = float((total_sum / num_valid_points) / 1000)
+    return depth

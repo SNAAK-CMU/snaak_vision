@@ -32,7 +32,7 @@ class PlateBreadSegementGenerator():
         top_left_crop = (390, 65)
         #top_right_crop = (490, 65)
         #bottom_left_crop = (390, 285)
-        bottom_right_crop = (490, 285)
+        bottom_right_crop = (490, 265)
         crop_mask = np.zeros_like(thresh)
         crop_x_start, crop_y_start = top_left_crop
         crop_x_end, crop_y_end = bottom_right_crop
@@ -55,13 +55,13 @@ class PlateBreadSegementGenerator():
                 #cv2.circle(image, (cX, cY), 5, (255, 0, 255), -1)
 
                 cv2.drawContours(image, [approx], -1, (0, 255, 0), 3) 
-                bottom_y = -1
-                for point in cnt: 
-                    x, y = point[0]
-                    if abs(x - cX) <= self.center_distance_thresh:
-                        bottom_y = max(y, bottom_y)
-                if bottom_y == -1: 
-                    bottom_y = np.max(cnt[:, 0, 1])
+                # bottom_y = -1
+                # for point in cnt: 
+                #     x, y = point[0]
+                #     if abs(x - cX) <= self.center_distance_thresh:
+                #         bottom_y = max(y, bottom_y)
+                # if bottom_y == -1: 
+                bottom_y = np.max(cnt[:, 0, 1])
 
                 top_y = -1
 
