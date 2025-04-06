@@ -254,18 +254,18 @@ class VisionNode(Node):
             image = self.rgb_image
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
-                image=image, ingredient_name=ingredient_name, threshold=50
+                image=image, ingredient_name=ingredient_name
             )
             self.get_logger().info(
                 f"{ingredient_name} check result: {ingredient_check}"
             )
-            response.ingredient_check = ingredient_check
+            response.is_placed = ingredient_check
             # TODO: do something with check_image
         except Exception as e:
             self.get_logger().error(f"Error while checking ingredient: {e}")
             self.get_logger().error(traceback.print_exc())
             ingredient_check = False
-            response.ingredient_check = ingredient_check
+            response.is_placed = ingredient_check
         return response
 
     def handle_sandwich_check_reset(self, request, response):
@@ -562,7 +562,7 @@ class VisionNode(Node):
                 )
 
             # get depth
-            cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+            cam_z = self.get_depth(cam_x, cam_y)
 
             # transform coordinates
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
