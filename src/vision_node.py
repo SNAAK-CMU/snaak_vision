@@ -261,6 +261,11 @@ class VisionNode(Node):
             )
             response.is_placed = ingredient_check
             # TODO: do something with check_image
+            # save check_image for debugging
+            cv2.imwrite(
+                f"/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/{ingredient_name}_check_image.jpg",
+                check_image,
+            )
         except Exception as e:
             self.get_logger().error(f"Error while checking ingredient: {e}")
             self.get_logger().error(traceback.print_exc())
