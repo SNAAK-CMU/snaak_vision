@@ -7,11 +7,11 @@ import segmentation.segment_utils as seg_utils
 
 ########## Parameters ##########
 
-# BREAD_HSV_LOWER_BOUND = (10, 30, 100)
-# BREAD_HSV_UPPER_BOUND = (40, 255, 255)
+BREAD_HSV_LOWER_BOUND = (10, 30, 100)
+BREAD_HSV_UPPER_BOUND = (40, 255, 255)
 
-# TRAY_HSV_LOWER_BOUND = (85, 50, 20)
-# TRAY_HSV_UPPER_BOUND = (100, 255, 255)
+TRAY_HSV_LOWER_BOUND = (85, 50, 20)
+TRAY_HSV_UPPER_BOUND = (100, 255, 255)
 
 TRAY_BOX_PIX = (
     250,
@@ -19,13 +19,6 @@ TRAY_BOX_PIX = (
     630,
     300,
 )  # (x1, y1, x2, y2) coordinates of the tray box in the image
-
-# MIN_TRAY_AREA = 125000
-# MAX_TRAY_AREA = 127000
-# MIN_BREAD_AREA = 27000
-# MAX_BREAD_AREA = 38000
-# MIN_CHEESE_AREA = 25000
-# MAX_CHEESE_AREA = 28000
 
 ################################
 
@@ -42,17 +35,11 @@ class SandwichChecker:
         bread_dims_m=(0.11, 0.08),
         cheese_dims_m=(0.090, 0.095),
     ):
-        # self.min_tray_area = MIN_TRAY_AREA
-        # self.max_tray_area = MAX_TRAY_AREA
-        # self.min_bread_area = MIN_BREAD_AREA
-        # self.max_bread_area = MAX_BREAD_AREA
-        # self.min_cheese_area = MIN_CHEESE_AREA
-        # self.max_cheese_area = MAX_CHEESE_AREA
 
-        # self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
-        # self.tray_hsv_upper_bound = TRAY_HSV_UPPER_BOUND
-        # self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
-        # self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
+        self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
+        self.tray_hsv_upper_bound = TRAY_HSV_UPPER_BOUND
+        self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
+        self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
 
 
         self.fov_width = fov_width
@@ -65,7 +52,18 @@ class SandwichChecker:
             (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
         ) / 2
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
-
+        
+        # Calculate the area of the tray and bread in pixels
+        self.tray_area = tray_dims_m[0] * tray_dims_m[1] * self.pix_per_m ** 2
+        self.bread_area = bread_dims_m[0] * bread_dims_m[1] * self.pix_per_m ** 2
+        self.cheese_area = cheese_dims_m[0] * cheese_dims_m[1] * self.pix_per_m ** 2
+        self.min_tray_area = 0.9 * self.tray_area
+        self.max_tray_area = 1.1 * self.tray_area
+        self.min_bread_area = 0.9 * self.bread_area
+        self.max_bread_area = 1.1 * self.bread_area
+        self.min_cheese_area = 0.9 * self.cheese_area
+        self.max_cheese_area = 1.1 * self.cheese_area
+        
         self.tray_contours = []
 
         self.bread_contours = []
