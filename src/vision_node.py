@@ -98,6 +98,7 @@ class VisionNode(Node):
             threshold_in_cm=self.threshold_in_cm,
             image_width=self.image_width,
             image_height=self.image_height,
+            node_logger=self.get_logger(),
         )
 
         # init control variables
@@ -251,7 +252,7 @@ class VisionNode(Node):
     def handle_sandwich_check(self, request, response):
         try:
             ingredient_name = request.ingredient_name
-            image = self.rgb_image
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
                 image=image, ingredient_name=ingredient_name
