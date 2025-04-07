@@ -48,6 +48,13 @@ BREAD_BIN_ID = 3
 ASSEMBLY_TRAY_ID = 4
 ASSEMBLY_BREAD_ID = 5
 
+FOV_WIDTH = 0.775  # metres
+FOV_HEIGHT = 0.435  # metres
+SW_CHECKER_THRESHOLD = 3  # cm
+
+IMG_WIDTH = 848
+IMG_HEIGHT = 480
+
 ############################################
 
 
@@ -59,13 +66,13 @@ class VisionNode(Node):
         self.rgb_image = None
 
         # camera FOV over assembly area
-        self.fov_w = 0.775 # metres
-        self.fov_h = 0.435
-        self.threshold_in_cm = 3
+        self.fov_w = FOV_WIDTH  # metres
+        self.fov_h = FOV_HEIGHT  # metres
+        self.threshold_in_cm = SW_CHECKER_THRESHOLD
 
         # image size
-        self.image_width = 848
-        self.image_height = 480
+        self.image_width = IMG_WIDTH
+        self.image_height = IMG_HEIGHT
 
         # init segmentation objects
         self.use_SAM = False
@@ -92,7 +99,7 @@ class VisionNode(Node):
             image_width=self.image_width,
             image_height=self.image_height,
         )
-        
+
         # init control variables
         self.assembly_tray_box = None
         self.assembly_bread_xyz_base = None
@@ -247,18 +254,18 @@ class VisionNode(Node):
             image = self.rgb_image
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
-                image=image, ingredient_name=ingredient_name, threshold=50
+                image=image, ingredient_name=ingredient_name
             )
             self.get_logger().info(
                 f"{ingredient_name} check result: {ingredient_check}"
             )
-            response.ingredient_check = ingredient_check
+            response.is_placed = ingredient_check
             # TODO: do something with check_image
         except Exception as e:
             self.get_logger().error(f"Error while checking ingredient: {e}")
             self.get_logger().error(traceback.print_exc())
             ingredient_check = False
-            response.ingredient_check = ingredient_check
+            response.is_placed = ingredient_check
         return response
 
     def handle_sandwich_check_reset(self, request, response):
@@ -555,7 +562,7 @@ class VisionNode(Node):
                 )
 
             # get depth
-            cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+            cam_z = self.get_depth(cam_x, cam_y)
 
             # transform coordinates
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
