@@ -31,9 +31,10 @@ class SandwichChecker:
         threshold_in_cm=3,
         image_width=848,
         image_height=480,
-        tray_dims_m=(0.305, 0.220),
-        bread_dims_m=(0.11, 0.08),
-        cheese_dims_m=(0.090, 0.095),
+        tray_dims_m=[0.305, 0.220],
+        bread_dims_m=[0.11, 0.08],
+        cheese_dims_m=[0.090, 0.095],
+        node_logger=None
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -58,7 +59,7 @@ class SandwichChecker:
         self.bread_area = bread_dims_m[0] * bread_dims_m[1] * self.pix_per_m ** 2
         self.cheese_area = cheese_dims_m[0] * cheese_dims_m[1] * self.pix_per_m ** 2
         self.min_tray_area = 0.9 * self.tray_area
-        self.max_tray_area = 1.1 * self.tray_area
+        self.max_tray_area = 1.4 * self.tray_area
         self.min_bread_area = 0.9 * self.bread_area
         self.max_bread_area = 1.1 * self.bread_area
         self.min_cheese_area = 0.9 * self.cheese_area
@@ -76,6 +77,18 @@ class SandwichChecker:
         self.ham_centers = []
 
         self.place_images = []
+
+        self.node_logger = node_logger
+        if self.node_logger is not None:
+            self.node_logger.info(
+                f"Initialized SandwichChecker with parameters: fov_width={fov_width}, fov_height={fov_height}, threshold_in_cm={threshold_in_cm}, image_width={image_width}, image_height={image_height}"
+            )
+            self.node_logger.info(
+                f"Calculated pix_per_m={self.pix_per_m}, pass_threshold={self.pass_threshold}"
+            )
+            self.node_logger.info(
+                f"Calculated tray_area={self.tray_area}, bread_area={self.bread_area}, cheese_area={self.cheese_area}"
+            )        
 
     def reset(self):
         self.tray_contours = []
@@ -106,7 +119,7 @@ class SandwichChecker:
         # TODO: handle case when bread or tray are not detected in image
 
         contours, hierarchy = seg_utils.contour_segmentation(
-            image, show_image=False, segment_type="binary"
+            image, show_image=False, segment_type="binary", show_separate_contours=False, binary_threshold=170, show_steps=False
         )
 
         # Extract tray contours
@@ -116,7 +129,9 @@ class SandwichChecker:
             if self.min_tray_area < cv2.contourArea(contour) < self.max_tray_area
         ]
         self.tray_contours = [contours[i] for i in tray_contour_indices]
-        # print(f"Number of tray contours: {len(self.tray_contours)}")
+        self.node_logger.info(
+            f"Number of tray contours: {len(self.tray_contours)}"
+        )
 
         # Extract bread contours
         bread_contour_indices = [
@@ -125,7 +140,9 @@ class SandwichChecker:
             if self.min_bread_area < cv2.contourArea(contour) < self.max_bread_area
         ]
         self.bread_contours = [contours[i] for i in bread_contour_indices]
-        # print(f"Number of bread contours: {len(self.bread_contours)}")
+        self.node_logger.info(
+            f"Number of bread contours: {len(self.tray_contours)}"
+        )
 
         for bread_contour in self.bread_contours:
             # Calculate the center of the bread contour
@@ -139,14 +156,8 @@ class SandwichChecker:
             self.bread_centers.append((cx, cy))
 
         # Check if bread is placed in tray
-        bread_on_tray = False
-        for tray_index in tray_contour_indices:
-            for bread_index in bread_contour_indices:
-                if hierarchy[0][bread_index][3] == tray_index:
-                    bread_on_tray = True
-                    break
-            if bread_on_tray:
-                break
+        bread_on_tray = True
+        #TODO measure distance between bread and tray centers
 
         # draw contours on image
         for contour in self.tray_contours:
@@ -191,7 +202,9 @@ class SandwichChecker:
             if self.min_cheese_area < cv2.contourArea(contour) < self.max_cheese_area
         ]
         self.cheese_contours = [contours[i] for i in cheese_contour_indices]
-        print(f"Number of cheese contours: {len(self.cheese_contours)}")
+        self.node_logger.info(
+            f"Number of cheese contours: {len(self.tray_contours)}"
+        )
 
         for cheese_contour in self.cheese_contours:
             # Calculate the center of the cheese contour
@@ -212,11 +225,10 @@ class SandwichChecker:
                     (bread_center[0] - cheese_center[0]) ** 2
                     + (bread_center[1] - cheese_center[1]) ** 2
                 ) ** 0.5
-                print("Pass threshold: ", self.pass_threshold)
-                print(
-                    f"Euclidean distance between bread and cheese centers in m : {round(distance/self.pix_per_m, 3)}"
+                self.node_logger.info(
+                    f"Distance between cheese center {cheese_center} and bread center {bread_center}: {distance}"
                 )
-
+                
                 if distance < self.pass_threshold:
                     valid_cheese = True
                     break
@@ -224,9 +236,13 @@ class SandwichChecker:
         # draw contours on image
         for contour in self.cheese_contours:
             cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
+        for contour in self.bread_contours:
+            cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
+        for contour in self.tray_contours:
+            cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
         # draw centers on image
         for center in self.cheese_centers:
-            cv2.circle(image, center, 5, (255, 0, 0), -1)
+            cv2.circle(image, center, 5, (255, 0, 255), -1)
         for center in self.bread_centers:
             cv2.circle(image, center, 5, (0, 0, 255), -1)
 
