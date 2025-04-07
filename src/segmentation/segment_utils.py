@@ -263,21 +263,11 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         thresholded_image = binary_opened
         
         if show_steps:
-            plt.figure(figsize=(24, 16))
-            plt.subplot(1, 4, 1)
-            plt.title("Original Image")
-            plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
-            plt.subplot(1, 4, 2)
-            plt.title("Grayscale Image")
-            plt.imshow(gray, cmap="gray")
-            plt.subplot(1, 4, 3)
-            plt.title("Blurred Image")
-            plt.imshow(blurred, cmap="gray")
-            plt.subplot(1, 4, 4)
-            plt.title("Binary Image")
-            plt.imshow(binary_opened, cmap="gray")
-            plt.tight_layout()
-            plt.show()
+            cv2.imshow("Binary Image", binary)
+            cv2.imshow("Closed Image", binary_closed)
+            cv2.imshow("Opened Image", binary_opened)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
         
     elif segment_type == 'edges':
         # Step 1: Preprocessing (convert to grayscale and apply Gaussian blur)
@@ -316,17 +306,13 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         thresholded_image = edges
         
         if show_steps:
-            plt.figure(figsize=(12, 8))
-            plt.subplot(1, 3, 1)
-            plt.title("Original Image")
-            plt.imshow(cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
-            plt.subplot(1, 3, 2)
-            plt.title("Adaptive Threshold Image")
-            plt.imshow(adaptive_thresh, cmap="gray")
-            plt.subplot(1, 3, 3)
-            plt.title("Edges Image")
-            plt.imshow(edges, cmap="gray")
-            plt.show()
+            cv2.imshow("Adaptive Threshold", adaptive_thresh)
+            cv2.imshow("Closed Image", closed)
+            cv2.imshow("Dilated Image", dilated)
+            cv2.imshow("Edges", edges)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
         
     elif segment_type == 'hsv':
         # Step 1: Convert to HSV
@@ -353,9 +339,9 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
     if show_image:
         contour_image_all = original_image.copy()
         cv2.drawContours(contour_image_all, contours, -1, (0, 255, 0), thickness=2)
-        plt.figure(figsize=(6, 6))
-        plt.title("All Detected Contours")
-        plt.imshow(cv2.cvtColor(contour_image_all, cv2.COLOR_BGR2RGB))
+        cv2.imshow("All Contours", contour_image_all)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
    
      # Visualize each separate contour and its area
     if show_separate_contours:
@@ -364,7 +350,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             print(f"Contour {i}: Area = {area}")
             
             # show only if area is above a certain threshold
-            if area < 20000:
+            if area < 5000:
                 continue
 
             # Create a mask for the current contour
@@ -375,11 +361,9 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             segmented_contour = cv2.bitwise_and(original_image, original_image, mask=mask)
 
             # Visualize the segmented contour
-            plt.figure(figsize=(6, 6))
-            plt.title(f"Segmented Contour {i} (Area = {area})")
-            plt.imshow(cv2.cvtColor(segmented_contour, cv2.COLOR_BGR2RGB))
-            plt.axis('off')
-            plt.show()
+            cv2.imshow(f"Segmented Contour {i}, Area = {area}", segmented_contour)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
     return contours, heirarchy
 
