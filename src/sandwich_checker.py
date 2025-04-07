@@ -6,19 +6,19 @@ import cv2
 
 ########## Parameters ##########
 
-BREAD_HSV_LOWER_BOUND = (10, 30, 100)
-BREAD_HSV_UPPER_BOUND = (40, 255, 255)
+# BREAD_HSV_LOWER_BOUND = (10, 30, 100)
+# BREAD_HSV_UPPER_BOUND = (40, 255, 255)
 
-TRAY_HSV_LOWER_BOUND = (85, 50, 20)
-TRAY_HSV_UPPER_BOUND = (100, 255, 255)
+# TRAY_HSV_LOWER_BOUND = (85, 50, 20)
+# TRAY_HSV_UPPER_BOUND = (100, 255, 255)
 
 
-MIN_TRAY_AREA = 125000
-MAX_TRAY_AREA = 127000
-MIN_BREAD_AREA = 27000
-MAX_BREAD_AREA = 38000
-MIN_CHEESE_AREA = 25000
-MAX_CHEESE_AREA = 28000
+# MIN_TRAY_AREA = 125000
+# MAX_TRAY_AREA = 127000
+# MIN_BREAD_AREA = 27000
+# MAX_BREAD_AREA = 38000
+# MIN_CHEESE_AREA = 25000
+# MAX_CHEESE_AREA = 28000
 
 ################################
 
@@ -31,18 +31,22 @@ class SandwichChecker:
         threshold_in_cm=3,
         image_width=848,
         image_height=480,
+        tray_dims_m=(0.305, 0.220),
+        bread_dims_m=(0.11, 0.08),
+        cheese_dims_m=(0.090, 0.095),
     ):
-        self.min_tray_area = MIN_TRAY_AREA
-        self.max_tray_area = MAX_TRAY_AREA
-        self.min_bread_area = MIN_BREAD_AREA
-        self.max_bread_area = MAX_BREAD_AREA
-        self.min_cheese_area = MIN_CHEESE_AREA
-        self.max_cheese_area = MAX_CHEESE_AREA
+        # self.min_tray_area = MIN_TRAY_AREA
+        # self.max_tray_area = MAX_TRAY_AREA
+        # self.min_bread_area = MIN_BREAD_AREA
+        # self.max_bread_area = MAX_BREAD_AREA
+        # self.min_cheese_area = MIN_CHEESE_AREA
+        # self.max_cheese_area = MAX_CHEESE_AREA
 
-        self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
-        self.tray_hsv_upper_bound = TRAY_HSV_UPPER_BOUND
-        self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
-        self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
+        # self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
+        # self.tray_hsv_upper_bound = TRAY_HSV_UPPER_BOUND
+        # self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
+        # self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
+
 
         self.fov_width = fov_width
         self.fov_height = fov_height
