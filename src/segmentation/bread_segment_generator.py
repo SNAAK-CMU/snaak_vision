@@ -5,8 +5,7 @@ Script to define class for segmenting the first bread slice in the assembly area
 import numpy as np
 import cv2
 
-from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv
-
+from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
 ############# Parameters ################
 
 TRAY_BOX_PIX = (250, 20, 630, 300)  # xmin, ymin, xmax, ymax
@@ -23,7 +22,7 @@ class BreadSegmentGenerator:
         self.hsv_lower_bound = np.array(HSV_LOWER_BOUND)
         self.hsv_upper_bound = np.array(HSV_UPPER_BOUND)
 
-    def get_bread_mask(self, image):
+    def get_bread_placement_mask(self, image):
         """
         Called from the vision node during ingredient placement.
         Returns the segmentation mask for the base bread slice in assembly area.
@@ -59,3 +58,41 @@ class BreadSegmentGenerator:
         )
 
         return orig_mask
+
+    def get_bread_pickup_point(self, image):
+        blurred_image = cv2.GaussianBlur(image, (5, 5), 0) 
+        top_left_crop = (380, 40)
+        bottom_right_crop = (520, 290)
+        crop_mask = np.zeros_like(image)
+        crop_x_start, crop_y_start = top_left_crop
+        crop_x_end, crop_y_end = bottom_right_crop
+
+        crop_mask[crop_y_start:crop_y_end, crop_x_start:crop_x_end] = 255
+        thresh = cv2.bitwise_and(blurred_image, crop_mask)
+        contours, heirarchy = contour_segmentation(thresh, binary_threshold=150, show_image=False, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='edges', edges_thresholds=(30, 50))
+        min_area = 7000
+        max_area = 16000
+        bread_contour = None
+        closest_contour = None
+        took_closest_contour = False
+        for contour in contours:
+            contour_area = cv2.contourArea(contour)
+            if min_area <= contour_area <= max_area:
+                bread_contour = contour
+                break
+            else:
+                diff = min(abs(min_area - contour_area), abs(max_area - contour_area))
+                if closest_contour is None or diff < closest_contour[0]:
+                    closest_contour = (diff, contour)
+
+        if bread_contour is None and contours:
+            took_closest_contour = True
+            bread_contour = closest_contour[1]
+        elif not contours:
+            raise Exception("No contours found, could not find bread pickup point")
+        M = cv2.moments(bread_contour)
+        cX = int(M["m10"] / M["m00"]) 
+        cY = int(M["m01"] / M["m00"])  
+        cv2.drawContours(image, [bread_contour], -1, (0, 255, 0), 3) 
+        cv2.circle(image, (cX, cY), 5, (0, 255, 255), -1)
+        return cX, cY, took_closest_contour

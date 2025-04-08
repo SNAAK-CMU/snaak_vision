@@ -445,17 +445,20 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting bread")
 
-                cam_x, cam_y, lower_y = (
-                    self.plate_bread_segment_generator.get_bread_pickup_point(image)
+                cam_x, cam_y, took_closest = (
+                    self.bread_segment_generator.get_bread_pickup_point(image)
                 )
-                cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
-                cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_plate_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_img.jpg",
                     image,
                 )
+
+                if took_closest:
+                    self.get_logger().info(
+                        "No bread detected, using closest contour instead"
+                    )
 
             else:
                 raise "Incorrect Bin ID"
@@ -483,11 +486,11 @@ class VisionNode(Node):
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-
+            z_offset = 0.025 if bin_id == BREAD_BIN_ID else 0.01
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
-                response_transformed[2] - 0.03
+                response_transformed[2] - z_offset
             )  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
             self.get_logger().info(
@@ -548,7 +551,7 @@ class VisionNode(Node):
             if location_id == ASSEMBLY_BREAD_ID:
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 self.get_logger().info(f"Segmenting Bread")
-                mask = self.bread_segment_generator.get_bread_mask(image)
+                mask = self.bread_segment_generator.get_bread_placement_mask(image)
                 self.get_logger().info(f"Bread segmentation completed")
 
                 # Average the positions of white points to get center
@@ -559,11 +562,11 @@ class VisionNode(Node):
                 # Save images for debugging
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_mask.jpg",
                     mask,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread__place_img.jpg",
                     image,
                 )
 
