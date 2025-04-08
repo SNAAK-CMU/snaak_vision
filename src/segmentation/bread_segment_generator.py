@@ -5,8 +5,7 @@ Script to define class for segmenting the first bread slice in the assembly area
 import numpy as np
 import cv2
 
-#from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
-from segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
+from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
 ############# Parameters ################
 
 TRAY_BOX_PIX = (250, 20, 630, 300)  # xmin, ymin, xmax, ymax
@@ -62,8 +61,8 @@ class BreadSegmentGenerator:
 
     def get_bread_pickup_point(self, image):
         blurred_image = cv2.GaussianBlur(image, (5, 5), 0) 
-        top_left_crop = (390, 65)
-        bottom_right_crop = (510, 270)
+        top_left_crop = (380, 40)
+        bottom_right_crop = (520, 290)
         crop_mask = np.zeros_like(image)
         crop_x_start, crop_y_start = top_left_crop
         crop_x_end, crop_y_end = bottom_right_crop
@@ -75,6 +74,7 @@ class BreadSegmentGenerator:
         max_area = 16000
         bread_contour = None
         closest_contour = None
+        took_closest_contour = False
         for contour in contours:
             contour_area = cv2.contourArea(contour)
             if min_area <= contour_area <= max_area:
@@ -86,9 +86,8 @@ class BreadSegmentGenerator:
                     closest_contour = (diff, contour)
 
         if bread_contour is None and contours:
+            took_closest_contour = True
             bread_contour = closest_contour[1]
-            print(cv2.contourArea(bread_contour))
-            print("taking closest contour")
         elif not contours:
             raise Exception("No contours found, could not find bread pickup point")
         M = cv2.moments(bread_contour)
@@ -96,4 +95,4 @@ class BreadSegmentGenerator:
         cY = int(M["m01"] / M["m00"])  
         cv2.drawContours(image, [bread_contour], -1, (0, 255, 0), 3) 
         cv2.circle(image, (cX, cY), 5, (0, 255, 255), -1)
-        return cX, cY
+        return cX, cY, took_closest_contour
