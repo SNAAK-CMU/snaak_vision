@@ -203,7 +203,7 @@ class SandwichChecker:
         ]
         self.cheese_contours = [contours[i] for i in cheese_contour_indices]
         self.node_logger.info(
-            f"Number of cheese contours: {len(self.tray_contours)}"
+            f"Number of cheese contours: {len(self.cheese_contours)}"
         )
 
         for cheese_contour in self.cheese_contours:
