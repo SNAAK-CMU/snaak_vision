@@ -35,6 +35,7 @@ class SandwichChecker:
         bread_dims_m=[0.11, 0.08],
         cheese_dims_m=[0.090, 0.095],
         node_logger=None,
+        tray_center=None
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -47,6 +48,8 @@ class SandwichChecker:
         self.threshold_in_cm = threshold_in_cm
         self.image_height = image_height
         self.image_width = image_width
+
+        self.tray_center = tray_center
 
         self.pix_per_m = (
             (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
@@ -181,7 +184,20 @@ class SandwichChecker:
 
         # Check if bread is placed in tray
         bread_on_tray = True
-        # TODO measure distance between bread and tray centers
+        
+        # measure distance between bread center and tray center
+        if self.tray_center is not None:
+            for bread_center in self.bread_centers:
+                distance = (
+                    (self.tray_center[0] - bread_center[0]) ** 2
+                    + (self.tray_center[1] - bread_center[1]) ** 2
+                ) ** 0.5
+                self.node_logger.info(
+                    f"Distance between bread center {bread_center} and tray center {self.tray_center}: {distance}"
+                )
+                if distance > self.pass_threshold:
+                    bread_on_tray = False
+                    break
 
         # draw contours on image
         # for contour in self.tray_contours:
