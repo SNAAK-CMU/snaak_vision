@@ -174,7 +174,6 @@ class VisionNode(Node):
         self.marker.header.frame_id = (
             "panda_link0"  # Frame of reference - base link of the robot arm
         )
-        self.end_effector_offset = -0.025 # end effector thinks it is 0.025 longer than it is
         self.marker.id = 0
         self.marker.type = Marker.SPHERE  # Marker type is a sphere
         self.marker.action = Marker.ADD
@@ -491,7 +490,7 @@ class VisionNode(Node):
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
-                response_transformed[2] - z_offset + self.end_effector_offset
+                response_transformed[2] - z_offset
             )  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
             self.get_logger().info(
