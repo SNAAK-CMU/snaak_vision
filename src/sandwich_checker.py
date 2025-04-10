@@ -211,6 +211,18 @@ class SandwichChecker:
         # TODO: save detection image to self.place_images
 
         return bread_on_tray, image
+    
+    def set_tray_center(self, tray_center):
+        """
+        Set the tray center coordinates.
+        Args:
+            tray_center (tuple): (x, y) coordinates of the tray center in pixels
+        """
+        self.tray_center = tray_center
+        if self.node_logger is not None:
+            self.node_logger.info(f"Tray center set to: {self.tray_center}")
+        if self.tray_center is None:
+            raise ValueError("Tray center cannot be None. Please set it before checking ingredients.")
 
     def check_cheese(self, image):
         """

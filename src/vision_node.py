@@ -55,6 +55,8 @@ SW_CHECKER_THRESHOLD = 3  # cm
 IMG_WIDTH = 848
 IMG_HEIGHT = 480
 
+TRAY_CENTER = [0.48, 0.0, 0.29] # in arm frame
+
 ############################################
 
 
@@ -303,7 +305,7 @@ class VisionNode(Node):
         else:
             raise ValueError("Homogeneous coordinate w cannot be zero")
 
-    def transform_location(self, x, y, depth):
+    def transform_location_cam2base(self, x, y, depth):
         """
         Modified Version of code from handeye_calibration_ros2
         """
@@ -355,6 +357,57 @@ class VisionNode(Node):
         point_base_link = self.dehomogenize(point_base_link)
 
         return point_base_link
+    
+    def transform_location_base2cam(self, x, y, z):
+        """
+        transform from arm base frame to camera optical frame
+
+        """
+
+        # extrinsic transform
+        T = np.eye(4)
+        T = np.eye(4)
+        link_order = [
+            ("panda_link0", "panda_hand"),
+            ("panda_hand", "camera_color_optical_frame"),
+        ]
+        transform_matrices = {}
+
+        for frame_id, child_frame_id in link_order:
+            if (frame_id, child_frame_id) in self.transformations:
+                transform = copy.deepcopy(
+                    self.transformations[(frame_id, child_frame_id)].transform
+                )
+                translation = [
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z,
+                ]
+                rotation = [
+                    transform.rotation.x,
+                    transform.rotation.y,
+                    transform.rotation.z,
+                    transform.rotation.w,
+                ]
+                T = np.eye(4)
+                T[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
+                T[:3, 3] = translation
+                transform_matrices[(frame_id, child_frame_id)] = T
+
+        T_link0_camera = (
+            transform_matrices[("panda_link0", "panda_hand")]
+            @ transform_matrices[("panda_hand", "camera_color_optical_frame")]
+        )
+
+        T_camera_link0 = np.linalg.inv(T_link0_camera)
+
+        point_camera_frame = T_camera_link0 @ np.array([x, y, z, 1])
+
+        # apply intrinsic transform:
+        point_camera_frame = point_camera_frame[:3] / point_camera_frame[3]
+        point_img_frame = self.K @ point_camera_frame
+        point_img_frame = point_img_frame[:2] / point_img_frame[2]  # Homogenize the point
+        return point_img_frame
 
     def handle_pickup_point(self, request, response):
         try:
@@ -483,7 +536,7 @@ class VisionNode(Node):
             # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
 
             self.get_logger().info("transforming coordinates...")
-            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+            response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
             z_offset = 0.01 if bin_id == BREAD_BIN_ID else 0.005 #TODO: tune these
@@ -552,6 +605,23 @@ class VisionNode(Node):
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 self.get_logger().info(f"Segmenting Bread")
                 mask = self.bread_segment_generator.get_bread_placement_mask(image)
+                
+                # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
+                # transform the tray center to camera frame
+                tray_center_cam = self.transform_location_base2cam(
+                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2])
+                self.sandwich_checker.set_tray_center(tray_center_cam) 
+                
+                # call bread check from sandwich check class
+                bread_place_result, bread_place_image = self.sandwich_checker.check_ingredient(image=image, ingredient_name="bread")
+                
+                # save bread check image for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_check_image.jpg",
+                    bread_place_image,
+                )
+                
+                
                 self.get_logger().info(f"Bread segmentation completed")
 
                 # Average the positions of white points to get center
@@ -574,7 +644,7 @@ class VisionNode(Node):
             cam_z = self.get_depth(cam_x, cam_y)
 
             # transform coordinates
-            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+            response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
 
