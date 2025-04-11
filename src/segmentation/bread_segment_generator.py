@@ -4,8 +4,9 @@ Script to define class for segmenting the first bread slice in the assembly area
 
 import numpy as np
 import cv2
-
+import heapq
 from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
+
 ############# Parameters ################
 
 TRAY_BOX_PIX = (200, 20, 630, 350)  # xmin, ymin, xmax, ymax
@@ -74,31 +75,26 @@ class BreadSegmentGenerator:
         crop_x_end, crop_y_end = bottom_right_crop
 
         crop_mask[crop_y_start:crop_y_end, crop_x_start:crop_x_end] = 255
-        thresh = cv2.bitwise_and(blurred_image, crop_mask)
-        contours, heirarchy = contour_segmentation(thresh, binary_threshold=150, show_image=False, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='edges', edges_thresholds=(30, 50))
-        min_area = 7000
-        max_area = 16000
-        bread_contour = None
-        closest_contour = None
-        took_closest_contour = False
+        crop = cv2.bitwise_and(blurred_image, crop_mask)
+
+        contours, heirarchy = contour_segmentation(crop, binary_threshold=150, show_image=False, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='edges', edges_thresholds=(30, 50))
+        min_area = 8000
+        max_area = 17000
+
+        contour_heap = [] # min heap
         for contour in contours:
             contour_area = cv2.contourArea(contour)
             if min_area <= contour_area <= max_area:
-                bread_contour = contour
-                break
-            else:
-                diff = min(abs(min_area - contour_area), abs(max_area - contour_area))
-                if closest_contour is None or diff < closest_contour[0]:
-                    closest_contour = (diff, contour)
+                heapq.heappush(contour_heap, (contour_area, contour))
 
-        if bread_contour is None and contours:
-            took_closest_contour = True
-            bread_contour = closest_contour[1]
-        elif not contours:
+        if len(contour_heap) == 0:
             raise Exception("No contours found, could not find bread pickup point")
+        else:
+            bread_contour = heapq.heappop(contour_heap)[1]
+
         M = cv2.moments(bread_contour)
         cX = int(M["m10"] / M["m00"]) 
         cY = int(M["m01"] / M["m00"])  
         cv2.drawContours(image, [bread_contour], -1, (0, 255, 0), 3) 
         cv2.circle(image, (cX, cY), 5, (0, 255, 255), -1)
-        return cX, cY, took_closest_contour
+        return cX, cY

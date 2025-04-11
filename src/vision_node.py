@@ -498,7 +498,7 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting bread")
 
-                cam_x, cam_y, took_closest = (
+                cam_x, cam_y = (
                     self.bread_segment_generator.get_bread_pickup_point(image)
                 )
 
@@ -507,11 +507,6 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_img.jpg",
                     image,
                 )
-
-                if took_closest:
-                    self.get_logger().info(
-                        "No bread detected, using closest contour instead"
-                    )
 
             else:
                 raise "Incorrect Bin ID"
