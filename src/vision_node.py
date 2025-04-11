@@ -256,9 +256,26 @@ class VisionNode(Node):
             ingredient_name = request.ingredient_name
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
+
+            if ingredient_name == 'bread':
+                # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
+                # transform the tray center to camera frame
+                self.get_logger().info("Setting Tray Center...")
+                tray_center_cam = self.transform_location_base2cam(
+                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2])
+                self.sandwich_checker.set_tray_center(tray_center_cam)
+
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
                 image=image, ingredient_name=ingredient_name
             )
+            # ingredient_check = True
+            # check_image = None
+
+            # check_image = self.bread_segment_generator.get_bread_placement_mask(image)
+            # self.get_logger().info(
+            #     f"{ingredient_name} check result: {ingredient_check}"
+            # )
+
             self.get_logger().info(
                 f"{ingredient_name} check result: {ingredient_check}"
             )
@@ -440,6 +457,7 @@ class VisionNode(Node):
                         )
                     )
                     # TODO: handle case where there is a top slice outside the bin
+                    mask = max_contour_mask
                     self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
@@ -454,10 +472,10 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                    max_contour_mask,
-                )
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
+                #     max_contour_mask,
+                # )
 
                 mask_truth_value = np.max(
                     mask
@@ -600,22 +618,6 @@ class VisionNode(Node):
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 self.get_logger().info(f"Segmenting Bread")
                 mask = self.bread_segment_generator.get_bread_placement_mask(image)
-                
-                # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
-                # transform the tray center to camera frame
-                tray_center_cam = self.transform_location_base2cam(
-                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2])
-                self.sandwich_checker.set_tray_center(tray_center_cam) 
-                
-                # call bread check from sandwich check class
-                bread_place_result, bread_place_image = self.sandwich_checker.check_ingredient(image=image, ingredient_name="bread")
-                
-                # save bread check image for debugging
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_check_image.jpg",
-                    bread_place_image,
-                )
-                
                 
                 self.get_logger().info(f"Bread segmentation completed")
 

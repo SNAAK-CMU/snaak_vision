@@ -291,7 +291,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         # Step 5: Morphological Operations
         kernel = np.ones((5, 5), np.uint8)
         closed = cv2.morphologyEx(adaptive_thresh, cv2.MORPH_CLOSE, kernel)
-        dilated = cv2.dilate(closed, kernel, iterations=2)
+        # dilated = cv2.dilate(closed, kernel, iterations=2)
         
         # Step 2: Edge Detection
         edges = cv2.Canny(closed, edges_thresholds[0], edges_thresholds[1])
@@ -308,7 +308,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
         if show_steps:
             cv2.imshow("Adaptive Threshold", adaptive_thresh)
             cv2.imshow("Closed Image", closed)
-            cv2.imshow("Dilated Image", dilated)
+            # cv2.imshow("Dilated Image", dilated)
             cv2.imshow("Edges", edges)
             cv2.waitKey(0)
             cv2.destroyAllWindows()

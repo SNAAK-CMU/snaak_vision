@@ -3,11 +3,12 @@
 import numpy as np
 import cv2
 import segmentation.segment_utils as seg_utils
+from segmentation.segment_utils import segment_from_hsv, convert_mask_to_orig_dims
 
 
 ########## Parameters ##########
 
-BREAD_HSV_LOWER_BOUND = (10, 30, 100)
+BREAD_HSV_LOWER_BOUND = (10, 50, 100)
 BREAD_HSV_UPPER_BOUND = (40, 255, 255)
 
 TRAY_HSV_LOWER_BOUND = (85, 50, 20)
@@ -43,6 +44,8 @@ class SandwichChecker:
         self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
         self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
 
+        self.crop_xmin, self.crop_ymin, self.crop_xmax, self.crop_ymax = TRAY_BOX_PIX
+
         self.fov_width = fov_width
         self.fov_height = fov_height
         self.threshold_in_cm = threshold_in_cm
@@ -63,7 +66,7 @@ class SandwichChecker:
         self.min_tray_area = 0.9 * self.tray_area
         self.max_tray_area = 1.2 * self.tray_area
         self.min_bread_area = 0.9 * self.bread_area
-        self.max_bread_area = 1.6 * self.bread_area
+        self.max_bread_area = 2.0 * self.bread_area
         self.min_cheese_area = 0.7 * self.cheese_area
         self.max_cheese_area = 1.4 * self.cheese_area
 
@@ -93,8 +96,8 @@ class SandwichChecker:
             )
 
     def reset(self):
-        self.tray_contours = []
-        self.tray_centers = []
+        self.tray_contour = []
+        self.tray_center = None
 
         self.cheese_contours = []
         self.cheese_centers = []
@@ -106,6 +109,49 @@ class SandwichChecker:
         self.ham_centers = []
 
         self.place_images = []
+
+    def get_bread_placement_mask(self, image):
+        """
+        Called from the vision node during ingredient placement.
+        Returns the segmentation mask for the base bread slice in assembly area.
+        """
+        # Crop out tray region
+        cropped_image = image[
+            self.crop_ymin : self.crop_ymax, self.crop_xmin : self.crop_xmax
+        ]
+        # cropped_image = cv2.GaussianBlur(cropped_image, (5, 5), 0)
+
+        mask = segment_from_hsv(
+            cropped_image, self.bread_hsv_lower_bound, self.bread_hsv_upper_bound
+        )
+
+        cv2.imwrite(
+            "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/assembly_bread_hsv_mask.jpg",
+            mask,
+        )
+
+        kernel = np.ones((5, 5), np.uint8)
+        opened_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        closed_mask = cv2.morphologyEx(
+            opened_mask, cv2.MORPH_CLOSE, kernel, iterations=1
+        )
+
+        orig_mask = convert_mask_to_orig_dims(
+            closed_mask,
+            image,
+            self.crop_xmin,
+            self.crop_ymin,
+            self.crop_xmax,
+            self.crop_ymax,
+        )
+
+        # cv2.imshow("bread_hsv_mask", orig_mask)
+        # cv2.imshow("Orig image", image)
+
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        return orig_mask
 
     def check_bread(self, image):
         """
@@ -120,72 +166,79 @@ class SandwichChecker:
 
         # TODO: handle case when bread or tray are not detected in image
 
-        contours, heirarchy = seg_utils.contour_segmentation(
-            image,
-            show_image=False,
-            show_separate_contours=False,
-            show_steps=False,
-            segment_type="edges",
-            edges_thresholds=(15, 30),
-        )
+        # contours, heirarchy = seg_utils.contour_segmentation(
+        #     image,
+        #     show_image=True,
+        #     show_separate_contours=True,
+        #     show_steps=True,
+        #     segment_type="edges",
+        #     edges_thresholds=(15, 30),
+        # )
 
-        # Extract tray ROIs
-        tray_contour_indices = [
-            i
-            for i, contour in enumerate(contours)
-            if self.min_tray_area < cv2.contourArea(contour) < self.max_tray_area
-        ]
-        self.tray_contours = [contours[i] for i in tray_contour_indices]
-        self.node_logger.info(f"Number of tray contours: {len(self.tray_contours)}")
+        # # Extract tray ROIs
+        # tray_contour_indices = [
+        #     i
+        #     for i, contour in enumerate(contours)
+        #     if self.min_tray_area < cv2.contourArea(contour) < self.max_tray_area
+        # ]
+        # self.tray_contours = [contours[i] for i in tray_contour_indices]
+        # self.node_logger.info(f"Number of tray contours: {len(self.tray_contours)}")
 
-        # Extract bread ROIs
-        bread_contour_indices = [
-            i
-            for i, contour in enumerate(contours)
-            if self.min_bread_area < cv2.contourArea(contour) < self.max_bread_area
-        ]
-        # get mask of bread ROIs
-        bread_mask = np.zeros(image.shape[:2], dtype=np.uint8)
-        for i in bread_contour_indices:
-            cv2.fillPoly(bread_mask, [contours[i]], 255)
+        # # Extract bread ROIs
+        # bread_contour_indices = [
+        #     i
+        #     for i, contour in enumerate(contours)
+        #     if 0.7*self.bread_area < cv2.contourArea(contour) < 2.0*self.bread_area
+        # ]
+        # # get mask of bread ROIs
+        # bread_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        # for i in bread_contour_indices:
+        #     cv2.fillPoly(bread_mask, [contours[i]], 255)
 
-        # ROIs image
-        masked_image = cv2.bitwise_and(image, image, mask=bread_mask)
+        # # ROIs image
+        # masked_image = cv2.bitwise_and(image, image, mask=bread_mask)
 
-        # get contours of ROIs image
-        contours, heirarchy = seg_utils.contour_segmentation(
-            masked_image,
-            show_image=False,
-            show_separate_contours=False,
-            show_steps=False,
-            segment_type="binary",
-        )
+        # # get contours of ROIs image
+        # contours, heirarchy = seg_utils.contour_segmentation(
+        #     masked_image,
+        #     show_image=True,
+        #     show_separate_contours=True,
+        #     show_steps=True,
+        #     segment_type="binary",
+        # )
 
-        # Extract bread contours
-        bread_contour_indices = [
-            i
-            for i, contour in enumerate(contours)
-            if self.min_bread_area < cv2.contourArea(contour) < self.max_bread_area
-        ]
+        # # Extract bread contours
+        # bread_contour_indices = [
+        #     i
+        #     for i, contour in enumerate(contours)
+        #     if 0.7*self.bread_area < cv2.contourArea(contour) < 1.6*self.bread_area
+        # ]
 
-        self.bread_contours = [contours[i] for i in bread_contour_indices]
-        self.node_logger.info(f"Number of bread contours: {len(self.tray_contours)}")
+        # self.bread_contours = [contours[i] for i in bread_contour_indices]
+        # self.node_logger.info(f"Number of bread contours: {len(self.tray_contours)}")
 
-        for bread_contour in self.bread_contours:
-            # Calculate the center of the bread contour
-            M = cv2.moments(bread_contour)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-            else:
-                cx, cy = 0, 0
+        # for bread_contour in self.bread_contours:
+        #     # Calculate the center of the bread contour
+        #     M = cv2.moments(bread_contour)
+        #     if M["m00"] != 0:
+        #         cx = int(M["m10"] / M["m00"])
+        #         cy = int(M["m01"] / M["m00"])
+        #     else:
+        #         cx, cy = 0, 0
 
-            self.bread_centers.append((cx, cy))
+        #     self.bread_centers.append((cx, cy))
+
+        bread_mask = self.get_bread_placement_mask(image)
+        y_coords, x_coords = np.where(bread_mask == 255)
+        center_x = int(np.mean(x_coords))
+        center_y = int(np.mean(y_coords))
+        bread_center = (center_x, center_y)
+        self.bread_centers.append(bread_center)
 
         # Check if bread is placed in tray
         bread_on_tray = True
         
-        # measure distance between bread center and tray center
+        # # measure distance between bread center and tray center
         if self.tray_center is not None:
             for bread_center in self.bread_centers:
                 distance = (
@@ -202,11 +255,13 @@ class SandwichChecker:
         # draw contours on image
         # for contour in self.tray_contours:
         #     cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
-        for contour in self.bread_contours:
-            cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
+        # for contour in self.bread_contours:
+        #     cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
         # draw centers on image
         for center in self.bread_centers:
             cv2.circle(image, center, 5, (0, 0, 255), -1)
+        if self.tray_center is not None: 
+            cv2.circle(image, (int(self.tray_center[0]), int(self.tray_center[1])), 5, (0, 255, 0), -1)
 
         # TODO: save detection image to self.place_images
 
@@ -218,12 +273,12 @@ class SandwichChecker:
         Args:
             tray_center (tuple): (x, y) coordinates of the tray center in pixels
         """
-        self.tray_center = tray_center
-        if self.node_logger is not None:
-            self.node_logger.info(f"Tray center set to: {self.tray_center}")
+        if tray_center is None:
+            raise ValueError("Tray center cannot be set to None. Please set it before checking ingredients.")
         if self.tray_center is None:
-            raise ValueError("Tray center cannot be None. Please set it before checking ingredients.")
-
+            self.tray_center = tray_center
+        self.node_logger.info(f"Tray center set to: {self.tray_center}")
+            
     def check_cheese(self, image):
         """
         Extract cheese contours and their centers from the image.
@@ -238,20 +293,57 @@ class SandwichChecker:
 
         # TODO: handle case when no cheese is detected in image
 
+        # get images
+        total_images = len(self.place_images)
+        first_image = self.place_images[total_images - 2]
+        second_image = self.place_images[total_images - 1]
+
+        # Crop the tray box from the bread image
+        first_image = first_image[
+            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+        ]
+
+        # Crop the tray box from the first ham image
+        second_image = second_image[
+            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+        ]
+
+        # Segment tray from the secpnd image using tray HSV values
+        second_hsv = cv2.cvtColor(second_image, cv2.COLOR_BGR2HSV)
+        tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
+        tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
+        tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+        tray_mask_inv = cv2.bitwise_not(tray_mask)
+
+        # Calculate difference image
+        diff = cv2.absdiff(first_image, second_image)
+        gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+        # Denoise difference mask
+        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+        gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
+
+        cv2.imshow("diff mask", diff)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+
+
         contours, hierarchy = seg_utils.contour_segmentation(
-            image,
-            show_image=False,
-            show_steps=False,
+            gray_diff,
+            show_image=True,
+            show_steps=True,
             segment_type="edges",
-            show_separate_contours=False,
-            edges_thresholds=(30, 50),
+            show_separate_contours=True,
+            edges_thresholds=(10, 20),
         )
 
         # Extract cheese contours
         cheese_contour_indices = [
             i
             for i, contour in enumerate(contours)
-            if self.min_cheese_area < cv2.contourArea(contour) < self.max_cheese_area
+            if 0.7*self.cheese_area < cv2.contourArea(contour) < 1.2 * self.cheese_area
         ]
         self.cheese_contours = [contours[i] for i in cheese_contour_indices]
         self.node_logger.info(
@@ -273,6 +365,7 @@ class SandwichChecker:
         valid_cheese = False
         for bread_center in self.bread_centers:
             for cheese_center in self.cheese_centers:
+
                 distance = (
                     (bread_center[0] - cheese_center[0]) ** 2
                     + (bread_center[1] - cheese_center[1]) ** 2
@@ -290,8 +383,8 @@ class SandwichChecker:
             cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
         for contour in self.bread_contours:
             cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
-        for contour in self.tray_contours:
-            cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
+        # for contour in self.tray_contours:
+        #     cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
         # draw centers on image
         for center in self.cheese_centers:
             cv2.circle(image, center, 5, (255, 0, 255), -1)
