@@ -325,10 +325,6 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
-                # cv2.imwrite(
-                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                #     max_contour_mask,
-                # )
 
                 mask_truth_value = np.max(
                     mask
