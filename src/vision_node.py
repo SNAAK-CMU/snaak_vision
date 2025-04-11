@@ -8,10 +8,12 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
+from std_srvs.srv import Trigger
 import traceback
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from PIL import Image as Im
+import os
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -44,6 +46,8 @@ BREAD_BIN_ID = 3
 ASSEMBLY_TRAY_ID = 4
 ASSEMBLY_BREAD_ID = 5
 
+FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
+
 ############################################
 
 
@@ -53,6 +57,8 @@ class VisionNode(Node):
         self.bridge = CvBridge()
         self.depth_image = None
         self.rgb_image = None
+        self.detection_image = None
+        self.detection_image_count = 0
 
         # init segmentation objects
         self.use_SAM = False
@@ -121,6 +127,13 @@ class VisionNode(Node):
             self.camera_intrinsics_callback,
             10,
         )  # TODO fix this
+
+        self.save_image_service = self.create_service(
+            Trigger,
+            self.get_name() + "/save_detection_image",
+            self.handle_save_detection_image,
+        )
+
 
         # Initialize image and transformation variables
         self.transformations = {}
@@ -287,6 +300,7 @@ class VisionNode(Node):
             bin_id = request.location_id
             timestamp = request.timestamp  # use this to sync
             image = self.rgb_image
+            self.detection_image = self.rgb_image
 
             self.get_logger().info(f"{image.shape}")
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
@@ -473,6 +487,37 @@ class VisionNode(Node):
             response.z = float("nan")
 
         return response
+    
+    def handle_save_detection_image(self, request, response):
+        try:
+            if self.detection_image is None:
+                self.get_logger().error("No detection image available to save.")
+                response.success = False
+                response.message = "No detection image available."
+                return response
+            
+            # Create the directory if it doesn't exist
+            if os.path.exists(FAILURE_IMAGES_PATH) is False:
+                os.makedirs(FAILURE_IMAGES_PATH)
+                self.get_logger().info(f"Created directory: {FAILURE_IMAGES_PATH}")
+
+            # Save the detection image
+            filename = os.path.join(
+                FAILURE_IMAGES_PATH, f"detection_image_{self.detection_image_count}.jpg"
+            )
+            cv2.imwrite(filename, self.detection_image)
+            self.get_logger().info(f"Saved detection image to {filename}")
+            self.detection_image_count += 1
+
+            response.success = True
+            response.message = f"Detection image saved to {filename}"
+        except Exception as e:
+            self.get_logger().error(f"Failed to save detection image: {e}")
+            response.success = False
+            response.message = str(e)
+
+        return response
+        
 
     def handle_place_point(self, request, response):
         try:
