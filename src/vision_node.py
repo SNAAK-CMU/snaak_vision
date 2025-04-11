@@ -302,6 +302,7 @@ class VisionNode(Node):
                         )
                     )
                     # TODO: handle case where there is a top slice outside the bin
+                    mask = max_contour_mask # choose the largest contour
                     self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
@@ -316,10 +317,10 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                    max_contour_mask,
-                )
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
+                #     max_contour_mask,
+                # )
 
                 mask_truth_value = np.max(
                     mask
