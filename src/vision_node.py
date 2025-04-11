@@ -332,7 +332,11 @@ class VisionNode(Node):
 
                 mask_truth_value = np.max(
                     mask
-                )  # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
+                ) 
+                
+                if mask_truth_value == 0:
+                    raise Exception("Cheese mask is empty")
+                
                 self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == mask_truth_value)
@@ -420,7 +424,7 @@ class VisionNode(Node):
                 )
 
             else:
-                raise "Incorrect Bin ID"
+                raise Exception("Incorrect Bin ID")
 
             if (
                 cam_x < 0
