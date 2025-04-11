@@ -8,8 +8,8 @@ import cv2
 from segmentation.segment_utils import convert_mask_to_orig_dims, segment_from_hsv, contour_segmentation
 ############# Parameters ################
 
-TRAY_BOX_PIX = (250, 20, 630, 300)  # xmin, ymin, xmax, ymax
-HSV_LOWER_BOUND = (10, 30, 100)
+TRAY_BOX_PIX = (200, 20, 630, 350)  # xmin, ymin, xmax, ymax
+HSV_LOWER_BOUND = (10, 50, 100)
 HSV_UPPER_BOUND = (40, 255, 255)
 
 #########################################
@@ -57,12 +57,18 @@ class BreadSegmentGenerator:
             self.crop_ymax,
         )
 
+        cv2.imshow("bread_hsv_mask", orig_mask)
+        cv2.imshow("Orig image", image)
+
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
         return orig_mask
 
     def get_bread_pickup_point(self, image):
         blurred_image = cv2.GaussianBlur(image, (5, 5), 0) 
-        top_left_crop = (380, 40)
-        bottom_right_crop = (520, 290)
+        top_left_crop = (390, 55)
+        bottom_right_crop = (510, 280)
         crop_mask = np.zeros_like(image)
         crop_x_start, crop_y_start = top_left_crop
         crop_x_end, crop_y_end = bottom_right_crop
