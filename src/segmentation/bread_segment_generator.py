@@ -58,17 +58,17 @@ class BreadSegmentGenerator:
             self.crop_ymax,
         )
 
-        cv2.imshow("bread_hsv_mask", orig_mask)
-        cv2.imshow("Orig image", image)
+        # cv2.imshow("bread_hsv_mask", orig_mask)
+        # cv2.imshow("Orig image", image)
 
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         return orig_mask
 
     def get_bread_pickup_point(self, image):
         blurred_image = cv2.GaussianBlur(image, (5, 5), 0) 
-        top_left_crop = (390, 55)
+        top_left_crop = (390, 65)
         bottom_right_crop = (510, 280)
         crop_mask = np.zeros_like(image)
         crop_x_start, crop_y_start = top_left_crop
@@ -78,12 +78,13 @@ class BreadSegmentGenerator:
         crop = cv2.bitwise_and(blurred_image, crop_mask)
 
         contours, heirarchy = contour_segmentation(crop, binary_threshold=150, show_image=False, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='edges', edges_thresholds=(30, 50))
-        min_area = 8000
+        min_area = 6000
         max_area = 17000
 
         contour_heap = [] # min heap
         for contour in contours:
             contour_area = cv2.contourArea(contour)
+            print(f"Contour area: {contour_area}")
             if min_area <= contour_area <= max_area:
                 heapq.heappush(contour_heap, (contour_area, contour))
 
