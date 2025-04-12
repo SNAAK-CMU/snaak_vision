@@ -321,11 +321,9 @@ class VisionNode(Node):
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image
-                    mask, max_contour_mask = np.array(
-                        self.Cheese_UNet.get_top_layer_binary(
+                    mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
-                    )
                     mask = max_contour_mask # choose the largest contour
                     self.get_logger().info("Got mask from UNet")
                 else:
@@ -379,12 +377,9 @@ class VisionNode(Node):
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image
-                    mask, max_contour_mask = np.array(
-                        self.Bologna_UNet.get_top_layer_binary(
+                    mask, max_contour_mask =self.Bologna_UNet.get_top_layer_binary(
                             Im.fromarray(unet_input_image), [61, 61, 245]
                         )
-                    )
-                    # TODO: handle case where there is a top slice outside the bin
                     self.get_logger().info("Got mask from UNet")
                     mask = max_contour_mask
                     mask_truth_value = np.max(
