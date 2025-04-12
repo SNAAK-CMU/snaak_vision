@@ -323,7 +323,6 @@ class VisionNode(Node):
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
                     )
-                    # TODO: handle case where there is a top slice outside the bin
                     mask = max_contour_mask # choose the largest contour
                     self.get_logger().info("Got mask from UNet")
                 else:
@@ -510,7 +509,9 @@ class VisionNode(Node):
             self.detection_image_count += 1
 
             response.success = True
-            response.message = f"Detection image saved to {filename}"
+            response.message = f"Detection image saved to {filename} "
+            self.detection_image = None  
+            self.get_logger().info("Detection image reset to None")
         except Exception as e:
             self.get_logger().error(f"Failed to save detection image: {e}")
             response.success = False
@@ -580,6 +581,10 @@ class VisionNode(Node):
 
             # get depth
             cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+
+            # verify depth
+            if not cam_z > 0.25 and cam_z < 0.35:
+                raise Exception("Incorrect Depth Value")
 
             # transform coordinates
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
