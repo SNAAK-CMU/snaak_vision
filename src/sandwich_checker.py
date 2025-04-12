@@ -11,8 +11,11 @@ from segmentation.segment_utils import segment_from_hsv, convert_mask_to_orig_di
 BREAD_HSV_LOWER_BOUND = (10, 50, 100)
 BREAD_HSV_UPPER_BOUND = (40, 255, 255)
 
-TRAY_HSV_LOWER_BOUND = (85, 50, 20)
-TRAY_HSV_UPPER_BOUND = (100, 255, 255)
+BREAD_HSV_LOWER_BOUND_STRICT = (10, 60, 100)
+BREAD_HSV_UPPER_BOUND_STRICT = (20, 110, 220)
+
+TRAY_HSV_LOWER_BOUND = (85, 40, 20)
+TRAY_HSV_UPPER_BOUND = (130, 255, 255)
 
 TRAY_BOX_PIX = (
     250,
@@ -20,6 +23,8 @@ TRAY_BOX_PIX = (
     630,
     300,
 )  # (x1, y1, x2, y2) coordinates of the tray box in the image
+
+CHEESE_W = 97  # width of the cheese slice in pixels
 
 ################################
 
@@ -36,7 +41,7 @@ class SandwichChecker:
         bread_dims_m=[0.11, 0.08],
         cheese_dims_m=[0.090, 0.095],
         node_logger=None,
-        tray_center=None
+        tray_center=None,
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -237,7 +242,7 @@ class SandwichChecker:
 
         # Check if bread is placed in tray
         bread_on_tray = True
-        
+
         # # measure distance between bread center and tray center
         if self.tray_center is not None:
             for bread_center in self.bread_centers:
@@ -260,13 +265,19 @@ class SandwichChecker:
         # draw centers on image
         for center in self.bread_centers:
             cv2.circle(image, center, 5, (0, 0, 255), -1)
-        if self.tray_center is not None: 
-            cv2.circle(image, (int(self.tray_center[0]), int(self.tray_center[1])), 5, (0, 255, 0), -1)
+        if self.tray_center is not None:
+            cv2.circle(
+                image,
+                (int(self.tray_center[0]), int(self.tray_center[1])),
+                5,
+                (0, 255, 0),
+                -1,
+            )
 
         # TODO: save detection image to self.place_images
 
         return bread_on_tray, image
-    
+
     def set_tray_center(self, tray_center):
         """
         Set the tray center coordinates.
@@ -274,11 +285,13 @@ class SandwichChecker:
             tray_center (tuple): (x, y) coordinates of the tray center in pixels
         """
         if tray_center is None:
-            raise ValueError("Tray center cannot be set to None. Please set it before checking ingredients.")
+            raise ValueError(
+                "Tray center cannot be set to None. Please set it before checking ingredients."
+            )
         if self.tray_center is None:
             self.tray_center = tray_center
         self.node_logger.info(f"Tray center set to: {self.tray_center}")
-            
+
     def check_cheese(self, image):
         """
         Extract cheese contours and their centers from the image.
@@ -299,101 +312,174 @@ class SandwichChecker:
         second_image = self.place_images[total_images - 1]
 
         # Crop the tray box from the bread image
-        first_image = first_image[
+        first_crop = first_image[
             TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
         ]
 
         # Crop the tray box from the first ham image
-        second_image = second_image[
+        second_crop = second_image[
             TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
         ]
 
-        # Segment tray from the secpnd image using tray HSV values
-        second_hsv = cv2.cvtColor(second_image, cv2.COLOR_BGR2HSV)
+        # Segment tray from the second image using tray HSV values
+        # second_hsv = cv2.cvtColor(second_image, cv2.COLOR_BGR2HSV)
+        # tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
+        # tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
+        # tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+        # tray_mask_inv = cv2.bitwise_not(tray_mask)
+
+        # # Calculate difference image
+        # diff = cv2.absdiff(first_image, second_image)
+        # gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+        # # Denoise difference mask
+        # gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+        # gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
+
+        # cv2.imshow("diff mask", diff)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        # contours, hierarchy = seg_utils.contour_segmentation(
+        #     gray_diff,
+        #     show_image=True,
+        #     show_steps=True,
+        #     segment_type="edges",
+        #     show_separate_contours=True,
+        #     edges_thresholds=(10, 20),
+        # )
+
+        # # Extract cheese contours
+        # cheese_contour_indices = [
+        #     i
+        #     for i, contour in enumerate(contours)
+        #     if 0.7*self.cheese_area < cv2.contourArea(contour) < 1.2 * self.cheese_area
+        # ]
+        # self.cheese_contours = [contours[i] for i in cheese_contour_indices]
+        # self.node_logger.info(
+        #     f"Number of cheese contours: {len(self.cheese_contours)}"
+        # )
+
+        # for cheese_contour in self.cheese_contours:
+        #     # Calculate the center of the cheese contour
+        #     M = cv2.moments(cheese_contour)
+        #     if M["m00"] != 0:
+        #         cx = int(M["m10"] / M["m00"])
+        #         cy = int(M["m01"] / M["m00"])
+        #     else:
+        #         cx, cy = 0, 0
+
+        #     self.cheese_centers.append((cx, cy))
+
+        # Segment tray from the second image using tray HSV values
+        # Convert the image to HSV color space
+        second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
         tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
         tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
         tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+
+        # Invert the tray mask
         tray_mask_inv = cv2.bitwise_not(tray_mask)
 
-        # Calculate difference image
-        diff = cv2.absdiff(first_image, second_image)
+        # Find the bounding box of the tray
+        contours, _ = cv2.findContours(
+            tray_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            tray_x, tray_y, tray_w, tray_h = cv2.boundingRect(largest_contour)
+
+        # Black out everything outside the tray box coordinate in tray_mask_inv
+        tray_mask_inv[0 : tray_y + 5, :] = 0
+        tray_mask_inv[tray_y + tray_h - 5 :, :] = 0
+        tray_mask_inv[:, 0 : tray_x + 5] = 0
+        tray_mask_inv[:, tray_x + tray_w - 5 :] = 0
+
+        # cv2.imshow("tray_mask_inv", tray_mask_inv)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        # Segment bread using strict hsv bounds (to differentiate between bread and cheese)
+        second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
+        bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8)
+        bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8)
+        bread_mask = cv2.inRange(
+            second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
+        )
+        bread_mask_inv = cv2.bitwise_not(bread_mask)
+
+        # Calculate the difference between the two images
+        diff = cv2.absdiff(first_crop, second_crop)
         gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
-        # Denoise difference mask
+        # And operate the difference image with bread mask and tray mask
         gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
         gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
 
-        cv2.imshow("diff mask", diff)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # Sliding window to find cheese bounding box
+        cheese_box = [
+            0,
+            0,
+            CHEESE_W,
+            CHEESE_W,
+        ]  # (x1, y1, x2, y2) coordinates of the cheese box in the image
 
+        max_sum = 0
+        best_cheese_box = None
 
+        # Slide the cheese box over the image
+        for col in range(0, gray_diff.shape[1] - CHEESE_W):  # iterate along image width
+            cheese_box[0] = col
+            cheese_box[2] = col + CHEESE_W
 
+            for row in range(
+                0, gray_diff.shape[0] - CHEESE_W
+            ):  # iterate along image height
+                cheese_box[1] = row
+                cheese_box[3] = row + CHEESE_W
 
-        contours, hierarchy = seg_utils.contour_segmentation(
-            gray_diff,
-            show_image=True,
-            show_steps=True,
-            segment_type="edges",
-            show_separate_contours=True,
-            edges_thresholds=(10, 20),
+                cheese_crop = gray_diff[
+                    cheese_box[1] : cheese_box[3], cheese_box[0] : cheese_box[2]
+                ]
+                cheese_crop_sum = np.sum(cheese_crop)
+                if cheese_crop_sum > max_sum:
+                    max_sum = cheese_crop_sum
+                    best_cheese_box = cheese_box.copy()
+
+        cheese_center = (
+            int((best_cheese_box[0] + best_cheese_box[2]) / 2) + TRAY_BOX_PIX[0],
+            int((best_cheese_box[1] + best_cheese_box[3]) / 2) + TRAY_BOX_PIX[1],
         )
 
-        # Extract cheese contours
-        cheese_contour_indices = [
-            i
-            for i, contour in enumerate(contours)
-            if 0.7*self.cheese_area < cv2.contourArea(contour) < 1.2 * self.cheese_area
-        ]
-        self.cheese_contours = [contours[i] for i in cheese_contour_indices]
-        self.node_logger.info(
-            f"Number of cheese contours: {len(self.cheese_contours)}"
-        )
-
-        for cheese_contour in self.cheese_contours:
-            # Calculate the center of the cheese contour
-            M = cv2.moments(cheese_contour)
-            if M["m00"] != 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-            else:
-                cx, cy = 0, 0
-
-            self.cheese_centers.append((cx, cy))
-
-        # threshold distance between all cheese centers and bread centers
+        # Check if cheese is placed within threshold distance from bread
         valid_cheese = False
         for bread_center in self.bread_centers:
-            for cheese_center in self.cheese_centers:
+            distance = (
+                (bread_center[0] - cheese_center[0]) ** 2
+                + (bread_center[1] - cheese_center[1]) ** 2
+            ) ** 0.5
+            # self.node_logger.info(
+            #     f"Distance between cheese center {cheese_center} and bread center {bread_center}: {distance}"
+            # )
 
-                distance = (
-                    (bread_center[0] - cheese_center[0]) ** 2
-                    + (bread_center[1] - cheese_center[1]) ** 2
-                ) ** 0.5
-                self.node_logger.info(
-                    f"Distance between cheese center {cheese_center} and bread center {bread_center}: {distance}"
-                )
-                
-                if distance < self.pass_threshold:
-                    valid_cheese = True
-                    break
+            if distance < self.pass_threshold:
+                valid_cheese = True
+                break
 
-        # draw contours on image
-        for contour in self.cheese_contours:
-            cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
+        # Visualize cheese localization
+        plot_image = image.copy()
+        cv2.circle(plot_image, cheese_center, 5, (255, 0, 255), -1)
+
+        # Visualize bread localization
         for contour in self.bread_contours:
-            cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
-        # for contour in self.tray_contours:
-        #     cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
-        # draw centers on image
-        for center in self.cheese_centers:
-            cv2.circle(image, center, 5, (255, 0, 255), -1)
+            cv2.drawContours(plot_image, contour, -1, (255, 0, 0), 3)
         for center in self.bread_centers:
-            cv2.circle(image, center, 5, (0, 0, 255), -1)
+            cv2.circle(plot_image, center, 5, (0, 0, 255), -1)
 
         return (
             valid_cheese,
-            image,
+            plot_image,
         )  # if no cheese is placed in tray or cheese is not close to bread
 
     def check_ham(self, image):
@@ -526,7 +612,7 @@ if __name__ == "__main__":
 
     # Load the image
     bread_place_image = cv2.imread(
-        "/home/parth/snaak/data/SCH_images_032335/cheese_ham_assembly/image_20250323-162330.png"
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150101.png"
     )
     bread_place_image = cv2.resize(bread_place_image, (848, 480))
 
@@ -543,7 +629,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     cheese_place_image = cv2.imread(
-        "/home/parth/snaak/data/SCH_images_032335/cheese_ham_assembly/image_20250323-162333.png"
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150115.png"
     )
     cheese_place_image = cv2.resize(cheese_place_image, (848, 480))
 
@@ -559,21 +645,21 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    ham_place_image = cv2.imread(
-        "/home/parth/snaak/data/SCH_images_032335/cheese_ham_assembly/image_20250323-162337.png"
+    cheese_place_image = cv2.imread(
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150206.png"
     )
 
     # resize image to (848, 480)
-    ham_place_image = cv2.resize(ham_place_image, (848, 480))
+    cheese_place_image = cv2.resize(cheese_place_image, (848, 480))
 
     # Check ham placement
-    ham_check, ham_check_image = sandwich_checker.check_ingredient(
-        ham_place_image, "ham"
+    cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
+        cheese_place_image, "cheese"
     )
 
-    print(f"Is ham placed correctly? {ham_check}")
+    print(f"Is cheese placed correctly? {cheese_check}")
 
     # visualize ham placement
-    cv2.imshow("Ham Check", ham_check_image)
+    cv2.imshow("Ham Check", cheese_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
