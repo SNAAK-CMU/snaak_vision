@@ -479,7 +479,7 @@ class VisionNode(Node):
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
-            self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_id} at {timestamp}")
+            self.get_logger().info(f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}")
 
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
 
@@ -553,7 +553,7 @@ class VisionNode(Node):
         :param response: Service response containing the place point coordinates
         :return: Response with the place point coordinates
         """
-        
+
         try:
             location_id = request.location_id
             timestamp = request.timestamp  # use this to sync
