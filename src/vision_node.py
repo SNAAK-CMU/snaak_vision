@@ -28,7 +28,12 @@ from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
 from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
-from segmentation.segment_utils import calc_bbox_from_mask, is_valid_pickup_point, is_point_within_bounds, get_averaged_depth
+from segmentation.segment_utils import (
+    calc_bbox_from_mask,
+    is_valid_pickup_point,
+    is_point_within_bounds,
+    get_averaged_depth,
+)
 
 from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 
@@ -70,6 +75,14 @@ class VisionNode(Node):
             classes=["background", "top_cheese", "other_cheese"],
             model_path="logs/cheese/best_epoch_weights.pth",  # choose weights
             mix_type=1,
+            num_classes=3,
+        )
+        self.Bologna_UNet = Ingredients_UNet(
+            count=False,
+            classes=["background", "", "", "top_bologna", "other_bologna"],
+            model_path="logs/ham/multiingredient_bologna/best_epoch_weights.pth",
+            mix_type=1,
+            num_classes=5,
         )
 
         # init control variables
@@ -220,7 +233,7 @@ class VisionNode(Node):
             y = request.y
             response.depth = self.get_depth(x, y)
         except Exception as e:
-           response.depth = float("nan")
+            response.depth = float("nan")
         return response
 
     def dehomogenize(self, point_h):
@@ -298,12 +311,9 @@ class VisionNode(Node):
             # self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
             if bin_id == CHEESE_BIN_ID:
                 # Cheese
-
-                self.get_logger().info(f"Segmenting cheese")
-
+                self.get_logger().info(f"Segmenting cheese...")
                 # Get binary mask
                 if self.use_SAM:
-                    self.get_logger().info("Saved Input Image")
                     mask = self.cheese_segment_generator.get_top_cheese_slice(image)
                     self.get_logger().info("Got mask from SAM")
                 elif self.use_UNet:
@@ -330,10 +340,6 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
-                # cv2.imwrite(
-                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                #     max_contour_mask,
-                # )
 
                 mask_truth_value = np.max(
                     mask
@@ -361,15 +367,57 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting ham")
 
-                # Get X, Y using SAM
-                cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(image)
+                if self.use_SAM:
+                    # Get X, Y using SAM
+                    cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(
+                        image
+                    )
+                    self.get_logger().info("Got mask from SAM")
+
+                elif self.use_UNet:
+                    # PIL stores images as RGB, OpenCV stores as BGR
+                    # TODO: change UNet to work with cv2 images
+                    unet_input_image = self.rgb_image
+                    mask, max_contour_mask = np.array(
+                        self.Bologna_UNet.get_top_layer_binary(
+                            Im.fromarray(unet_input_image), [61, 61, 245]
+                        )
+                    )
+                    # TODO: handle case where there is a top slice outside the bin
+                    self.get_logger().info("Got mask from UNet")
+                    mask = max_contour_mask
+                    mask_truth_value = np.max(
+                        mask
+                    )
+                    
+                    if mask_truth_value == 0:
+                        raise Exception("Bologna mask is empty")
+                    
+                    self.get_logger().info(f"Max value in mask {mask_truth_value}")
+                    # Average the true pixels in binary mask to get center X, Y
+                    y_coords, x_coords = np.where(mask == mask_truth_value)
+                    cam_x = int(np.mean(x_coords))
+                    cam_y = int(np.mean(y_coords))
+                else:
+                    self.get_logger().info("Neither SAM nor UNet were chosen")
+                    raise Exception("No segmentation method chosen")
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_img.jpg",
+                    image,
+                )
+
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_mask.jpg",
+                    mask,
+                )
+
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_point.jpg",
                     image,
                 )
 
@@ -426,7 +474,9 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
-            is_reachable = is_valid_pickup_point(response.x, response.y, bin_id, BREAD_BIN_ID)
+            is_reachable = is_valid_pickup_point(
+                response.x, response.y, bin_id, BREAD_BIN_ID
+            )
             if not is_reachable:
                 raise Exception("Pickup point not within bin")
 
