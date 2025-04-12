@@ -534,6 +534,10 @@ class VisionNode(Node):
             # get depth
             cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
 
+            # verify depth
+            if not cam_z > 0.25 and cam_z < 0.35:
+                raise Exception("Incorrect Depth Value")
+
             # transform coordinates
             response_transformed = self.transform_location(cam_x, cam_y, cam_z)
 
