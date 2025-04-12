@@ -288,11 +288,12 @@ class VisionNode(Node):
         try:
             bin_id = request.location_id
             timestamp = request.timestamp  # use this to sync
-            image = self.rgb_image
-            self.detection_image = self.rgb_image
+            image = self.rgb_image.copy()
+            
 
             self.get_logger().info(f"{image.shape}")
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            self.detection_image = image.copy()
 
             self.get_logger().info(f"Bin ID: {bin_id}")
             # self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
@@ -454,7 +455,7 @@ class VisionNode(Node):
 
             # Save the detection image
             filename = os.path.join(
-                FAILURE_IMAGES_PATH, f"detection_image_{self.detection_image_count}.jpg"
+                FAILURE_IMAGES_PATH, f"failure_image_{self.detection_image_count}.jpg"
             )
             cv2.imwrite(filename, self.detection_image)
             self.get_logger().info(f"Saved detection image to {filename}")
