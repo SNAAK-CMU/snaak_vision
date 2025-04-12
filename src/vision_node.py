@@ -75,12 +75,14 @@ class VisionNode(Node):
             classes=["background", "top_cheese", "other_cheese"],
             model_path="logs/cheese/best_epoch_weights.pth",  # choose weights
             mix_type=1,
+            num_classes=3,
         )
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
             model_path="logs/ham/multiingredient_bologna/best_epoch_weights.pth",
             mix_type=1,
+            num_classes=5,
         )
 
         # init control variables
