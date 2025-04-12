@@ -315,7 +315,6 @@ class VisionNode(Node):
                             Im.fromarray(unet_input_image), [250, 250, 55]
                         )
                     )
-                    # TODO: handle case where there is a top slice outside the bin
                     mask = max_contour_mask # choose the largest contour
                     self.get_logger().info("Got mask from UNet")
                 else:
@@ -462,7 +461,9 @@ class VisionNode(Node):
             self.detection_image_count += 1
 
             response.success = True
-            response.message = f"Detection image saved to {filename}"
+            response.message = f"Detection image saved to {filename} "
+            self.detection_image = None  
+            self.get_logger().info("Detection image reset to None")
         except Exception as e:
             self.get_logger().error(f"Failed to save detection image: {e}")
             response.success = False
