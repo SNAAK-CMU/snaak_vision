@@ -10,10 +10,12 @@ from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
 from snaak_vision.srv import CheckIngredientPlace
 from std_srvs.srv import Trigger
+from std_srvs.srv import Trigger
 import traceback
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from PIL import Image as Im
+import os
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -57,6 +59,8 @@ IMG_HEIGHT = 480
 
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
+FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
+
 ############################################
 
 
@@ -75,6 +79,8 @@ class VisionNode(Node):
         # image size
         self.image_width = IMG_WIDTH
         self.image_height = IMG_HEIGHT
+        self.detection_image = None
+        self.detection_image_count = 0
 
         # init segmentation objects
         self.use_SAM = False
@@ -91,6 +97,24 @@ class VisionNode(Node):
             classes=["background", "top_cheese", "other_cheese"],
             model_path="logs/cheese/best_epoch_weights.pth",  # choose weights
             mix_type=1,
+            num_classes=3,
+        )
+        self.Bologna_UNet = Ingredients_UNet(
+            count=False,
+            classes=["background", "", "", "top_bologna", "other_bologna"],
+            model_path="logs/ham/multiingredient_bologna/best_epoch_weights.pth",
+            mix_type=1,
+            num_classes=5,
+        )
+
+        # init sandwich checker
+        self.sandwich_checker = SandwichChecker(
+            fov_height=self.fov_h,
+            fov_width=self.fov_w,
+            threshold_in_cm=self.threshold_in_cm,
+            image_width=self.image_width,
+            image_height=self.image_height,
+            node_logger=self.get_logger(),
         )
 
         # init sandwich checker
@@ -159,7 +183,13 @@ class VisionNode(Node):
             "/camera/camera/color/camera_info",
             self.camera_intrinsics_callback,
             10,
-        )  # TODO fix this
+        )
+
+        self.save_image_service = self.create_service(
+            Trigger,
+            self.get_name() + "/save_detection_image",
+            self.handle_save_detection_image,
+        )
 
         # Initialize image and transformation variables
         self.transformations = {}
@@ -202,7 +232,7 @@ class VisionNode(Node):
             self.get_logger().error(f"Using previous transform")
 
     def depth_callback(self, msg):
-        # Convert ROS Image message to OpenCV format
+        """Convert ROS Image message to OpenCV format"""
         try:
             self.depth_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
@@ -214,6 +244,7 @@ class VisionNode(Node):
             self.rgb_image = None
 
     def rgb_callback(self, msg):
+        """Convert ROS Image message to OpenCV format"""
         try:
             self.rgb_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
@@ -225,6 +256,7 @@ class VisionNode(Node):
             self.rgb_image = None
 
     def camera_intrinsics_callback(self, msg):
+        """Handle incoming camera info messages."""
         intrinsic_matrix = msg.k
         self.K = np.array(intrinsic_matrix).reshape((3, 3))
         self.distortion_coefficients = np.array(msg.d)
@@ -236,6 +268,13 @@ class VisionNode(Node):
         return R.from_quat([x, y, z, w]).as_matrix()
 
     def get_depth(self, x, y):
+        """
+        Get the depth value at the specified pixel coordinates (x, y) in the depth image.
+        :param x: X coordinate in the image
+        :param y: Y coordinate in the image
+        :return: Depth value in meters
+        """
+        # Check if depth image is available
         if self.depth_image is None:
             self.get_logger().warn("Depth image not available yet!")
             return float("nan")
@@ -308,6 +347,12 @@ class VisionNode(Node):
         return response
 
     def handle_get_depth(self, request, response):
+        """
+        Handle the service request to get depth at a specific point in the image.
+        :param request: Service request containing x and y coordinates
+        :param response: Service response containing the depth value
+        :return: Response with the depth value
+        """
         try:
             x = request.x
             y = request.y
@@ -318,7 +363,11 @@ class VisionNode(Node):
         return response
 
     def dehomogenize(self, point_h):
-        # Dehomogenize by dividing x, y, z by w
+        """Dehomogenize by dividing x, y, z by w"""
+        # Check if the point is in homogeneous coordinates
+        if len(point_h) != 4:
+            raise ValueError("Point must be in homogeneous coordinates (4D vector)")
+        # Dehomogenize the point
         x, y, z, w = point_h
         if w != 0:
             return (x / w, y / w, z / w)
@@ -328,6 +377,12 @@ class VisionNode(Node):
     def transform_location_cam2base(self, x, y, depth):
         """
         Modified Version of code from handeye_calibration_ros2
+
+        :param x: X coordinate in the image
+        :param y: Y coordinate in the image
+        :param depth: Depth value in meters
+        :return: Transformed coordinates in base link frame
+
         """
 
         # apply intrinsic transform:
@@ -372,7 +427,7 @@ class VisionNode(Node):
 
         self.get_logger().info("Got extrinsic transform, applying it to the point")
 
-        point_base_link = T_link0_camera @ point_cam  # why not inverse??????
+        point_base_link = T_link0_camera @ point_cam
 
         point_base_link = self.dehomogenize(point_base_link)
 
@@ -432,37 +487,38 @@ class VisionNode(Node):
         return point_img_frame
 
     def handle_pickup_point(self, request, response):
+        """
+        Handle the service request to get pickup point in the image.
+        :param request: Service request containing location ID and timestamp
+        :param response: Service response containing the pickup point coordinates
+        :return: Response with the pickup point coordinates
+        """
+
         try:
             bin_id = request.location_id
-            timestamp = request.timestamp  # use this to sync
-            image = self.rgb_image
+            timestamp = request.timestamp  # TODO: use this to sync
+            image = self.rgb_image.copy()
 
             self.get_logger().info(f"{image.shape}")
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            self.detection_image = image.copy()
 
-            self.get_logger().info(f"Bin ID: {bin_id}")
-            # self.get_logger().info(f"Cheese Bin ID: {CHEESE_BIN_ID}")
+            self.get_logger().info(f"Got request for pickup point in bin ID: {bin_id}")
             if bin_id == CHEESE_BIN_ID:
                 # Cheese
-
-                self.get_logger().info(f"Segmenting cheese")
-
+                self.get_logger().info(f"Segmenting cheese...")
                 # Get binary mask
                 if self.use_SAM:
-                    self.get_logger().info("Saved Input Image")
                     mask = self.cheese_segment_generator.get_top_cheese_slice(image)
                     self.get_logger().info("Got mask from SAM")
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image
-                    mask, max_contour_mask = np.array(
-                        self.Cheese_UNet.get_top_layer_binary(
-                            Im.fromarray(unet_input_image), [250, 250, 55]
-                        )
+                    mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
+                        Im.fromarray(unet_input_image), [250, 250, 55]
                     )
-                    # TODO: handle case where there is a top slice outside the bin
-                    mask = max_contour_mask
+                    mask = max_contour_mask  # choose the largest contour
                     self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
@@ -482,9 +538,9 @@ class VisionNode(Node):
                 #     max_contour_mask,
                 # )
 
-                mask_truth_value = np.max(
-                    mask
-                )  # TODO: this would cause the center of mask to be center of image if entire image is true / false add check here to return invalid pickup point if max value of mask is 0
+                if mask_truth_value == 0:
+                    raise Exception("Cheese mask is empty")
+
                 self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == mask_truth_value)
@@ -504,15 +560,52 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting ham")
 
-                # Get X, Y using SAM
-                cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(image)
+                if self.use_SAM:
+                    # Get X, Y using SAM
+                    cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(
+                        image
+                    )
+                    self.get_logger().info("Got mask from SAM")
+
+                elif self.use_UNet:
+                    # PIL stores images as RGB, OpenCV stores as BGR
+                    # TODO: change UNet to work with cv2 images
+                    unet_input_image = self.rgb_image
+                    mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
+                        Im.fromarray(unet_input_image), [61, 61, 245]
+                    )
+                    self.get_logger().info("Got mask from UNet")
+                    mask = max_contour_mask
+                    mask_truth_value = np.max(mask)
+
+                    if mask_truth_value == 0:
+                        raise Exception("Bologna mask is empty")
+
+                    self.get_logger().info(f"Max value in mask {mask_truth_value}")
+                    # Average the true pixels in binary mask to get center X, Y
+                    y_coords, x_coords = np.where(mask == mask_truth_value)
+                    cam_x = int(np.mean(x_coords))
+                    cam_y = int(np.mean(y_coords))
+                else:
+                    self.get_logger().info("Neither SAM nor UNet were chosen")
+                    raise Exception("No segmentation method chosen")
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_img.jpg",
+                    image,
+                )
+
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_mask.jpg",
+                    mask,
+                )
+
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_point.jpg",
                     image,
                 )
 
@@ -532,7 +625,7 @@ class VisionNode(Node):
                 )
 
             else:
-                raise "Incorrect Bin ID"
+                raise Exception("Incorrect Bin ID")
 
             if (
                 cam_x < 0
@@ -551,7 +644,7 @@ class VisionNode(Node):
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
-            # self.get_logger().info(f"Got pickup point {response.x}, {response.y} and depth {response.depth:.2f} in bin {bin_ID} at {timestamp}")
+            self.get_logger().info(f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}")
 
             self.get_logger().info("transforming coordinates...")
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
@@ -582,7 +675,53 @@ class VisionNode(Node):
 
         return response
 
+    def handle_save_detection_image(self, request, response):
+        """
+        Handle the service request to save the detection image.
+        :param request: Service request
+        :param response: Service response indicating success or failure
+        :return: Response with success or failure message
+        """
+
+        try:
+            if self.detection_image is None:
+                self.get_logger().error("No detection image available to save.")
+                response.success = False
+                response.message = "No detection image available."
+                return response
+
+            # Create the directory if it doesn't exist
+            if os.path.exists(FAILURE_IMAGES_PATH) is False:
+                os.makedirs(FAILURE_IMAGES_PATH)
+                self.get_logger().info(f"Created directory: {FAILURE_IMAGES_PATH}")
+
+            # Save the detection image
+            filename = os.path.join(
+                FAILURE_IMAGES_PATH, f"failure_image_{self.detection_image_count}.jpg"
+            )
+            cv2.imwrite(filename, self.detection_image)
+            self.get_logger().info(f"Saved detection image to {filename}")
+            self.detection_image_count += 1
+
+            response.success = True
+            response.message = f"Detection image saved to {filename} "
+            self.detection_image = None
+            self.get_logger().info("Detection image reset to None")
+        except Exception as e:
+            self.get_logger().error(f"Failed to save detection image: {e}")
+            response.success = False
+            response.message = str(e)
+
+        return response
+
     def handle_place_point(self, request, response):
+        """
+        Handle the service request to get place point in the image.
+        :param request: Service request containing location ID and timestamp
+        :param response: Service response containing the place point coordinates
+        :return: Response with the place point coordinates
+        """
+
         try:
             location_id = request.location_id
             timestamp = request.timestamp  # use this to sync
@@ -644,6 +783,11 @@ class VisionNode(Node):
 
             # get depth
             cam_z = self.get_depth(cam_x, cam_y)
+
+            # verify depth
+            if not cam_z > 0.25 and cam_z < 0.35:
+                raise Exception("Incorrect Depth Value")
+            
 
             # transform coordinates
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
