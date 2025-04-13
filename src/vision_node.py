@@ -117,15 +117,7 @@ class VisionNode(Node):
             node_logger=self.get_logger(),
         )
 
-        # init sandwich checker
-        self.sandwich_checker = SandwichChecker(
-            fov_height=self.fov_h,
-            fov_width=self.fov_w,
-            threshold_in_cm=self.threshold_in_cm,
-            image_width=self.image_width,
-            image_height=self.image_height,
-            node_logger=self.get_logger(),
-        )
+# Removed redundant initialization of sandwich_checker
 
         # init control variables
         self.assembly_tray_box = None

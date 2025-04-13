@@ -365,7 +365,7 @@ def contour_segmentation(image, binary_threshold=150, show_image=True, show_sepa
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-    return contours, heirarchy
+    return contours, hierarchy
 
 def difference_mask(image1, image2, thresh):
     """
