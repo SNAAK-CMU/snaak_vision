@@ -310,39 +310,53 @@ class SandwichChecker:
         bread_on_tray = True
 
         # # measure distance between bread center and tray center
+        distance = -1
         if self.tray_center is not None:
-            for bread_center in self.bread_centers:
-                distance = (
-                    (self.tray_center[0] - bread_center[0]) ** 2
-                    + (self.tray_center[1] - bread_center[1]) ** 2
-                ) ** 0.5
-                self.node_logger.info(
-                    f"Distance between bread center {bread_center} and tray center {self.tray_center}: {distance}"
-                )
-                if distance > self.pass_threshold:
-                    bread_on_tray = False
-                    break
+            distance = (
+                (self.tray_center[0] - bread_center[0]) ** 2
+                + (self.tray_center[1] - bread_center[1]) ** 2
+            ) ** 0.5
+            self.node_logger.info(
+                f"Distance between bread center {bread_center} and tray center {self.tray_center}: {distance}"
+            )
+            if distance > self.pass_threshold:
+                bread_on_tray = False
 
-        # draw contours on image
-        # for contour in self.tray_contours:
-        #     cv2.drawContours(image, contour, -1, (0, 255, 0), 3)
-        # for contour in self.bread_contours:
-        #     cv2.drawContours(image, contour, -1, (255, 0, 0), 3)
+        plot_image = image.copy()
+
         # draw centers on image
         for center in self.bread_centers:
-            cv2.circle(image, center, 5, (0, 0, 255), -1)
+            cv2.circle(plot_image, center, 5, (0, 0, 255), -1)
         if self.tray_center is not None:
             cv2.circle(
-                image,
+                plot_image,
                 (int(self.tray_center[0]), int(self.tray_center[1])),
                 5,
                 (0, 255, 0),
                 -1,
             )
 
-        # TODO: save detection image to self.place_images
+        # Write distance and pass threshold on the image
+        cv2.putText(
+            plot_image,
+            f"Distance: {distance:.2f} px",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            plot_image,
+            f"Pass threshold: {self.pass_threshold:.2f} px",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
 
-        return bread_on_tray, image
+        return bread_on_tray, plot_image
 
     def check_bread_top(self, image):
         bread_center, plot_image = self.get_bread_top_placement_xy(image)
@@ -352,6 +366,7 @@ class SandwichChecker:
         bread_on_tray = True
 
         # measure distance between bread center and tray center
+        distance = -1
         if self.tray_center is not None:
             distance = (
                 (self.tray_center[0] - bread_center[0]) ** 2
@@ -371,6 +386,26 @@ class SandwichChecker:
                 (0, 255, 0),
                 -1,
             )
+
+        # Write distance and pass threshold on the image
+        cv2.putText(
+            plot_image,
+            f"Distance: {distance:.2f} px",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            plot_image,
+            f"Pass threshold: {self.pass_threshold:.2f} px",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
 
         return bread_on_tray, plot_image
 
@@ -586,6 +621,26 @@ class SandwichChecker:
         for center in self.bread_centers:
             cv2.circle(plot_image, center, 5, (0, 0, 255), -1)
 
+        # Write distance and pass threshold on the image
+        cv2.putText(
+            plot_image,
+            f"Distance: {distance:.2f} px",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            plot_image,
+            f"Pass threshold: {self.pass_threshold:.2f} px",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+
         return (
             valid_cheese,
             plot_image,
@@ -687,6 +742,26 @@ class SandwichChecker:
         cv2.circle(best_circle_img, (best_circle_x, best_circle_y), 5, (0, 255, 0), 3)
         for center in self.bread_centers:
             cv2.circle(best_circle_img, center, 5, (0, 0, 255), -1)
+
+        # Write distance and pass threshold on the image
+        cv2.putText(
+            best_circle_img,
+            f"Distance: {distance:.2f} px",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            best_circle_img,
+            f"Pass threshold: {self.pass_threshold:.2f} px",
+            (10, 60),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            2,
+        )
 
         return is_ham_correct, best_circle_img
 
