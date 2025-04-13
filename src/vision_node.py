@@ -8,6 +8,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
+from snaak_vision.srv import CheckIngredientPlace
+from std_srvs.srv import Trigger
 from std_srvs.srv import Trigger
 import traceback
 from visualization_msgs.msg import Marker
@@ -37,6 +39,8 @@ from segmentation.segment_utils import (
 
 from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 
+from sandwich_checker import SandwichChecker
+
 ############### Parameters #################
 
 # Make these config
@@ -45,6 +49,15 @@ CHEESE_BIN_ID = 2
 BREAD_BIN_ID = 3
 ASSEMBLY_TRAY_ID = 4
 ASSEMBLY_BREAD_ID = 5
+
+FOV_WIDTH = 0.775  # metres
+FOV_HEIGHT = 0.435  # metres
+SW_CHECKER_THRESHOLD = 3  # cm
+
+IMG_WIDTH = 848
+IMG_HEIGHT = 480
+
+TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -57,6 +70,15 @@ class VisionNode(Node):
         self.bridge = CvBridge()
         self.depth_image = None
         self.rgb_image = None
+
+        # camera FOV over assembly area
+        self.fov_w = FOV_WIDTH  # metres
+        self.fov_h = FOV_HEIGHT  # metres
+        self.threshold_in_cm = SW_CHECKER_THRESHOLD
+
+        # image size
+        self.image_width = IMG_WIDTH
+        self.image_height = IMG_HEIGHT
         self.detection_image = None
         self.detection_image_count = 0
 
@@ -84,6 +106,18 @@ class VisionNode(Node):
             mix_type=1,
             num_classes=5,
         )
+
+        # init sandwich checker
+        self.sandwich_checker = SandwichChecker(
+            fov_height=self.fov_h,
+            fov_width=self.fov_w,
+            threshold_in_cm=self.threshold_in_cm,
+            image_width=self.image_width,
+            image_height=self.image_height,
+            node_logger=self.get_logger(),
+        )
+
+# Removed redundant initialization of sandwich_checker
 
         # init control variables
         self.assembly_tray_box = None
@@ -118,6 +152,19 @@ class VisionNode(Node):
             GetXYZFromImage,
             self.get_name() + "/get_place_point",
             self.handle_place_point,
+        )
+
+        # Create sandwich checker service server
+        self.sandwich_checker_service = self.create_service(
+            CheckIngredientPlace,
+            self.get_name() + "/check_ingredient",
+            self.handle_sandwich_check,
+        )
+
+        self.sandwich_check_reset_service = self.create_service(
+            Trigger,
+            self.get_name() + "/reset_sandwich_checker",
+            self.handle_sandwich_check_reset,
         )
 
         self.subscription_tf = self.create_subscription(
@@ -235,6 +282,62 @@ class VisionNode(Node):
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
         return depth
 
+    def handle_sandwich_check(self, request, response):
+        try:
+            ingredient_name = request.ingredient_name
+            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            self.get_logger().info(f"Checking ingredient: {ingredient_name}")
+
+            if ingredient_name == "bread_bottom":
+                # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
+                # transform the tray center to camera frame
+                self.get_logger().info("Setting Tray Center...")
+                tray_center_cam = self.transform_location_base2cam(
+                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2]
+                )
+                self.sandwich_checker.set_tray_center(tray_center_cam)
+
+            ingredient_check, check_image = self.sandwich_checker.check_ingredient(
+                image=image, ingredient_name=ingredient_name
+            )
+            # ingredient_check = True
+            # check_image = None
+
+            # check_image = self.bread_segment_generator.get_bread_placement_mask(image)
+            # self.get_logger().info(
+            #     f"{ingredient_name} check result: {ingredient_check}"
+            # )
+
+            self.get_logger().info(
+                f"{ingredient_name} check result: {ingredient_check}"
+            )
+            response.is_placed = ingredient_check
+            response.is_error = False
+            # TODO: do something with check_image
+            # save check_image for debugging
+            cv2.imwrite(
+                f"/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/{ingredient_name}_check_image.jpg",
+                check_image,
+            )
+        except Exception as e:
+            self.get_logger().error(f"Error while checking ingredient: {e}")
+            self.get_logger().error(traceback.print_exc())
+            ingredient_check = False
+            response.is_placed = ingredient_check
+            response.is_error = True
+        return response
+
+    def handle_sandwich_check_reset(self, request, response):
+        try:
+            self.sandwich_checker.reset()
+            response.success = True
+            response.message = "Sandwich checker reset successfully"
+        except Exception as e:
+            self.get_logger().error(f"Error while resetting sandwich checker: {e}")
+            response.success = False
+            response.message = "Failed to reset sandwich checker"
+        return response
+
     def handle_get_depth(self, request, response):
         """
         Handle the service request to get depth at a specific point in the image.
@@ -248,6 +351,7 @@ class VisionNode(Node):
             response.depth = self.get_depth(x, y)
         except Exception as e:
             response.depth = float("nan")
+            self.get_logger().error(f"Error while getting depth: {e}")
         return response
 
     def dehomogenize(self, point_h):
@@ -262,7 +366,7 @@ class VisionNode(Node):
         else:
             raise ValueError("Homogeneous coordinate w cannot be zero")
 
-    def transform_location(self, x, y, depth):
+    def transform_location_cam2base(self, x, y, depth):
         """
         Modified Version of code from handeye_calibration_ros2
 
@@ -321,6 +425,59 @@ class VisionNode(Node):
 
         return point_base_link
 
+    def transform_location_base2cam(self, x, y, z):
+        """
+        transform from arm base frame to camera optical frame
+
+        """
+
+        # extrinsic transform
+        T = np.eye(4)
+        T = np.eye(4)
+        link_order = [
+            ("panda_link0", "panda_hand"),
+            ("panda_hand", "camera_color_optical_frame"),
+        ]
+        transform_matrices = {}
+
+        for frame_id, child_frame_id in link_order:
+            if (frame_id, child_frame_id) in self.transformations:
+                transform = copy.deepcopy(
+                    self.transformations[(frame_id, child_frame_id)].transform
+                )
+                translation = [
+                    transform.translation.x,
+                    transform.translation.y,
+                    transform.translation.z,
+                ]
+                rotation = [
+                    transform.rotation.x,
+                    transform.rotation.y,
+                    transform.rotation.z,
+                    transform.rotation.w,
+                ]
+                T = np.eye(4)
+                T[:3, :3] = self.quaternion_to_rotation_matrix(*rotation)
+                T[:3, 3] = translation
+                transform_matrices[(frame_id, child_frame_id)] = T
+
+        T_link0_camera = (
+            transform_matrices[("panda_link0", "panda_hand")]
+            @ transform_matrices[("panda_hand", "camera_color_optical_frame")]
+        )
+
+        T_camera_link0 = np.linalg.inv(T_link0_camera)
+
+        point_camera_frame = T_camera_link0 @ np.array([x, y, z, 1])
+
+        # apply intrinsic transform:
+        point_camera_frame = point_camera_frame[:3] / point_camera_frame[3]
+        point_img_frame = self.K @ point_camera_frame
+        point_img_frame = (
+            point_img_frame[:2] / point_img_frame[2]
+        )  # Homogenize the point
+        return point_img_frame
+
     def handle_pickup_point(self, request, response):
         """
         Handle the service request to get pickup point in the image.
@@ -368,6 +525,10 @@ class VisionNode(Node):
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
                     mask,
                 )
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
+                #     max_contour_mask,
+                # )
 
                 mask_truth_value = np.max(mask)
 
@@ -447,15 +608,13 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting bread")
 
-                cam_x, cam_y, lower_y = (
-                    self.plate_bread_segment_generator.get_bread_pickup_point(image)
+                cam_x, cam_y = self.bread_segment_generator.get_bread_pickup_point(
+                    image
                 )
-                cv2.circle(image, (cam_x, lower_y), 5, (0, 255, 255), -1)
-                cv2.circle(image, (cam_x, cam_y), 5, (255, 0, 255), -1)
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_plate_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_img.jpg",
                     image,
                 )
 
@@ -481,12 +640,15 @@ class VisionNode(Node):
                 raise Exception("Invalid Z")
             self.get_logger().info(f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}")
 
-            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
+            self.get_logger().info("transforming coordinates...")
+            response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
+            self.get_logger().info("got transform, applying it to point...")
+            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.01  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
-                response_transformed[2] - 0.03
+                response_transformed[2] - z_offset
             )  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
             self.get_logger().info(
@@ -496,7 +658,7 @@ class VisionNode(Node):
                 response.x, response.y, bin_id, BREAD_BIN_ID
             )
             if not is_reachable:
-                raise Exception("Pickup point not within bin")
+                raise Exception("Pickup points not within bin")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
@@ -593,7 +755,8 @@ class VisionNode(Node):
             if location_id == ASSEMBLY_BREAD_ID:
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 self.get_logger().info(f"Segmenting Bread")
-                mask = self.bread_segment_generator.get_bread_mask(image)
+                mask = self.bread_segment_generator.get_bread_placement_mask(image)
+
                 self.get_logger().info(f"Bread segmentation completed")
 
                 # Average the positions of white points to get center
@@ -604,24 +767,26 @@ class VisionNode(Node):
                 # Save images for debugging
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_mask.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_mask.jpg",
                     mask,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread__place_img.jpg",
                     image,
                 )
 
             # get depth
-            cam_z = float(self.depth_image[int(cam_y / 2.0), int(cam_x / 2.0)]) / 1000.0
+            cam_z = self.get_depth(cam_x, cam_y)
+
+
+            # transform coordinates
+            response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
+
 
             # verify depth
             if not cam_z > 0.25 and cam_z < 0.35:
                 raise Exception("Incorrect Depth Value")
-
-            # transform coordinates
-            response_transformed = self.transform_location(cam_x, cam_y, cam_z)
-
+            
             self.get_logger().info("got transform, applying it to point...")
 
             response.x = response_transformed[0]

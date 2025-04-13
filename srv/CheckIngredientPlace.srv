@@ -1,0 +1,4 @@
+string ingredient_name
+---
+bool is_placed
+bool is_error
