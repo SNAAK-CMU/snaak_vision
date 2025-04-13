@@ -281,6 +281,7 @@ class VisionNode(Node):
                 f"{ingredient_name} check result: {ingredient_check}"
             )
             response.is_placed = ingredient_check
+            response.is_error = False
             # TODO: do something with check_image
             # save check_image for debugging
             cv2.imwrite(
@@ -292,6 +293,7 @@ class VisionNode(Node):
             self.get_logger().error(traceback.print_exc())
             ingredient_check = False
             response.is_placed = ingredient_check
+            response.is_error = True
         return response
 
     def handle_sandwich_check_reset(self, request, response):
