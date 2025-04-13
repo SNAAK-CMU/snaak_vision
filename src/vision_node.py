@@ -59,6 +59,19 @@ IMG_HEIGHT = 480
 
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
+# Cheese bin coords
+CHEESE_BIN_XMIN = 250
+CHEESE_BIN_YMIN = 0
+CHEESE_BIN_XMAX = 470
+CHEESE_BIN_YMAX = 340
+
+# Ham bin coords
+HAM_BIN_XMIN = 240
+HAM_BIN_YMIN = 0
+HAM_BIN_XMAX = 450
+HAM_BIN_YMAX = 330
+
+
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
 ############################################
@@ -116,8 +129,6 @@ class VisionNode(Node):
             image_height=self.image_height,
             node_logger=self.get_logger(),
         )
-
-# Removed redundant initialization of sandwich_checker
 
         # init control variables
         self.assembly_tray_box = None
@@ -507,6 +518,15 @@ class VisionNode(Node):
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image
+
+                    # mask everything but the bin
+                    bin_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+                    bin_mask[
+                        CHEESE_BIN_YMIN : CHEESE_BIN_YMAX,
+                        CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
+                    ] = 255
+                    unet_input_image = cv2.bitwise_and(mask, unet_input_image)
+
                     mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [250, 250, 55]
                     )
@@ -565,6 +585,15 @@ class VisionNode(Node):
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image
+
+                     # mask everything but the bin
+                    bin_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+                    bin_mask[
+                        HAM_BIN_YMIN : HAM_BIN_YMAX,
+                        HAM_BIN_XMIN : HAM_BIN_XMAX,
+                    ] = 255
+                    unet_input_image = cv2.bitwise_and(mask, unet_input_image)
+
                     mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [61, 61, 245]
                     )
