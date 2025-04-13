@@ -150,6 +150,19 @@ class SandwichChecker:
             self.crop_ymax,
         )
 
+        # Select the largest contour and black out everything else
+        contours, _ = cv2.findContours(
+            orig_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            mask = np.zeros_like(orig_mask)
+            cv2.drawContours(mask, [largest_contour], -1, 255, -1)
+            orig_mask = cv2.bitwise_and(orig_mask, mask)
+        else:
+            orig_mask = np.zeros_like(orig_mask)
+            self.node_logger.info("No contours found in the image.")
+
         # cv2.imshow("bread_hsv_mask", orig_mask)
         # cv2.imshow("Orig image", image)
 
