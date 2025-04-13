@@ -527,6 +527,12 @@ class VisionNode(Node):
                     ] = 255
                     unet_input_image = cv2.bitwise_and(mask, unet_input_image)
 
+                    # save image for debugging
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                        unet_input_image,
+                    )
+
                     mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [250, 250, 55]
                     )
@@ -538,7 +544,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_source_image.jpg",
                     image,
                 )
                 cv2.imwrite(
@@ -594,6 +600,12 @@ class VisionNode(Node):
                     ] = 255
                     unet_input_image = cv2.bitwise_and(mask, unet_input_image)
 
+                    # save image for debugging
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_input_image.jpg",
+                        unet_input_image,
+                    )
+
                     mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [61, 61, 245]
                     )
@@ -618,7 +630,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_source_image.jpg",
                     image,
                 )
 
