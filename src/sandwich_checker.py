@@ -115,7 +115,7 @@ class SandwichChecker:
 
         self.place_images = []
 
-    def get_bread_placement_mask(self, image):
+    def get_bread_placement_mask_bottom(self, image):
         """
         Called from the vision node during ingredient placement.
         Returns the segmentation mask for the base bread slice in assembly area.
@@ -171,7 +171,60 @@ class SandwichChecker:
 
         return orig_mask
 
-    def check_bread(self, image):
+    def get_bread_top_placement_xy(self, image):
+        second_crop = image[
+            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+        ]
+
+        second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
+        bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8)
+        bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8)
+        bread_mask = cv2.inRange(
+            second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
+        )
+
+        bread_mask = cv2.dilate(bread_mask, None, iterations=1)
+        bread_mask = cv2.erode(bread_mask, None, iterations=2)
+
+        contours, _ = cv2.findContours(
+            bread_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            x, y, w, h = cv2.boundingRect(largest_contour)
+            bread_mask = np.zeros_like(bread_mask)
+            cv2.drawContours(bread_mask, [largest_contour], -1, 255, -1)
+
+        # Apply closing to fill in small holes
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        bread_mask = cv2.morphologyEx(bread_mask, cv2.MORPH_CLOSE, kernel)
+
+        contours, _ = cv2.findContours(
+            bread_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        plot_image = image.copy()
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            hull = cv2.convexHull(largest_contour)
+
+            # Shift the hull coordinates to the original image coordinates
+            hull[:, :, 0] += TRAY_BOX_PIX[0]
+            hull[:, :, 1] += TRAY_BOX_PIX[1]
+
+            M = cv2.moments(hull)
+            if M["m00"] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            else:
+                cX, cY = 0, 0
+
+            cv2.drawContours(plot_image, [hull], -1, (255, 0, 0), 3)
+            cv2.circle(plot_image, (cX, cY), 7, (0, 0, 255), -1)
+
+        return (cX, cY), plot_image
+
+    def check_bread_bottom(self, image):
         """
         Extract tray contours, bread contours and their centers from the image.
         Check if the bread is placed in the tray.
@@ -246,7 +299,7 @@ class SandwichChecker:
 
         #     self.bread_centers.append((cx, cy))
 
-        bread_mask = self.get_bread_placement_mask(image)
+        bread_mask = self.get_bread_placement_mask_bottom(image)
         y_coords, x_coords = np.where(bread_mask == 255)
         center_x = int(np.mean(x_coords))
         center_y = int(np.mean(y_coords))
@@ -290,6 +343,36 @@ class SandwichChecker:
         # TODO: save detection image to self.place_images
 
         return bread_on_tray, image
+
+    def check_bread_top(self, image):
+        bread_center, plot_image = self.get_bread_top_placement_xy(image)
+        self.bread_centers.append(bread_center)
+
+        # Check if bread is placed in tray
+        bread_on_tray = True
+
+        # measure distance between bread center and tray center
+        if self.tray_center is not None:
+            distance = (
+                (self.tray_center[0] - bread_center[0]) ** 2
+                + (self.tray_center[1] - bread_center[1]) ** 2
+            ) ** 0.5
+            self.node_logger.info(
+                f"Distance between bread center {bread_center} and tray center {self.tray_center}: {distance}"
+            )
+            if distance > self.pass_threshold:
+                bread_on_tray = False
+
+        if self.tray_center is not None:
+            cv2.circle(
+                image,
+                (int(self.tray_center[0]), int(self.tray_center[1])),
+                5,
+                (0, 255, 0),
+                -1,
+            )
+
+        return bread_on_tray, plot_image
 
     def set_tray_center(self, tray_center):
         """
@@ -480,9 +563,22 @@ class SandwichChecker:
                 valid_cheese = True
                 break
 
+        # Convert cheese box to orig image coordinates
+        best_cheese_box[0] += TRAY_BOX_PIX[0]
+        best_cheese_box[1] += TRAY_BOX_PIX[1]
+        best_cheese_box[2] += TRAY_BOX_PIX[0]
+        best_cheese_box[3] += TRAY_BOX_PIX[1]
+
         # Visualize cheese localization
         plot_image = image.copy()
         cv2.circle(plot_image, cheese_center, 5, (255, 0, 255), -1)
+        cv2.rectangle(
+            plot_image,
+            (best_cheese_box[0], best_cheese_box[1]),
+            (best_cheese_box[2], best_cheese_box[3]),
+            (255, 0, 255),
+            2,
+        )
 
         # Visualize bread localization
         for contour in self.bread_contours:
@@ -587,21 +683,24 @@ class SandwichChecker:
             (0, 255, 0),
             2,
         )
-        cv2.circle(best_circle_img, (best_circle[0], best_circle[1]), 2, (0, 0, 255), 3)
+
+        cv2.circle(best_circle_img, (best_circle_x, best_circle_y), 5, (0, 255, 0), 3)
         for center in self.bread_centers:
-            cv2.circle(best_circle_img, center, 10, (255, 0, 0), -1)
+            cv2.circle(best_circle_img, center, 5, (0, 0, 255), -1)
 
         return is_ham_correct, best_circle_img
 
     def check_ingredient(self, image, ingredient_name):
         self.place_images.append(image)
 
-        if ingredient_name == "bread":
-            return self.check_bread(image)
+        if ingredient_name == "bread_bottom":
+            return self.check_bread_bottom(image)
         elif ingredient_name == "cheese":
             return self.check_cheese(image)
         elif ingredient_name == "ham":
             return self.check_ham(image)
+        elif ingredient_name == "bread_top":
+            return self.check_bread_top(image)
         else:
             raise ValueError(f"Unknown ingredient: {ingredient_name}")
 
@@ -623,56 +722,80 @@ if __name__ == "__main__":
         image_height=image_height,
     )
 
-    # Load the image
+    # Place and check bread
     bread_place_image = cv2.imread(
         "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150101.png"
     )
     bread_place_image = cv2.resize(bread_place_image, (848, 480))
-
-    # Check bread placement
     bread_check, bread_check_image = sandwich_checker.check_ingredient(
-        bread_place_image, "bread"
+        bread_place_image, "bread_bottom"
     )
-
     print(f"Is bread placed correctly? {bread_check}")
-
-    # visualize bread placement
     cv2.imshow("Bread Check", bread_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    # Place and check cheese
     cheese_place_image = cv2.imread(
         "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150115.png"
     )
     cheese_place_image = cv2.resize(cheese_place_image, (848, 480))
-
-    # Check cheese placement
     cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
         cheese_place_image, "cheese"
     )
-
     print(f"Is cheese placed correctly? {cheese_check}")
-
-    # visualize cheese placement
-    cv2.imshow("Two Cheese Check", cheese_check_image)
+    cv2.imshow("Cheese Check", cheese_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    # Place and check cheese
     cheese_place_image = cv2.imread(
         "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150206.png"
     )
-
-    # resize image to (848, 480)
     cheese_place_image = cv2.resize(cheese_place_image, (848, 480))
-
-    # Check ham placement
     cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
         cheese_place_image, "cheese"
     )
-
     print(f"Is cheese placed correctly? {cheese_check}")
+    cv2.imshow("Cheese Check", cheese_check_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    # visualize ham placement
-    cv2.imshow("Ham Check", cheese_check_image)
+    # Place and check ham
+    ham_place_image = cv2.imread(
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150241.png"
+    )
+    ham_place_image = cv2.resize(ham_place_image, (848, 480))
+    ham_check, ham_check_image = sandwich_checker.check_ingredient(
+        ham_place_image, "ham"
+    )
+    print(f"Is ham placed correctly? {ham_check}")
+    cv2.imshow("Ham Check", ham_check_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # Place and check cheese
+    cheese_place_image = cv2.imread(
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150254.png"
+    )
+    cheese_place_image = cv2.resize(cheese_place_image, (848, 480))
+    cheese_check, cheese_check_image = sandwich_checker.check_ingredient(
+        cheese_place_image, "cheese"
+    )
+    print(f"Is cheese placed correctly? {cheese_check}")
+    cv2.imshow("cheese Check", cheese_check_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # Place and check bread
+    bread_place_image = cv2.imread(
+        "/home/parth/snaak/data/SCH_images_041125/cheese_check_1/image_20250411-150310.png"
+    )
+    bread_place_image = cv2.resize(bread_place_image, (848, 480))
+    bread_check, bread_check_image = sandwich_checker.check_ingredient(
+        bread_place_image, "bread_top"
+    )
+    print(f"Is top bread placed correctly? {bread_check}")
+    cv2.imshow("Bread Check", bread_check_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

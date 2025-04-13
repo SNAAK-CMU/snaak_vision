@@ -55,7 +55,7 @@ SW_CHECKER_THRESHOLD = 3  # cm
 IMG_WIDTH = 848
 IMG_HEIGHT = 480
 
-TRAY_CENTER = [0.48, 0.0, 0.29] # in arm frame
+TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
 ############################################
 
@@ -257,12 +257,13 @@ class VisionNode(Node):
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
 
-            if ingredient_name == 'bread':
+            if ingredient_name == "bread_bottom":
                 # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
                 # transform the tray center to camera frame
                 self.get_logger().info("Setting Tray Center...")
                 tray_center_cam = self.transform_location_base2cam(
-                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2])
+                    TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2]
+                )
                 self.sandwich_checker.set_tray_center(tray_center_cam)
 
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
@@ -374,7 +375,7 @@ class VisionNode(Node):
         point_base_link = self.dehomogenize(point_base_link)
 
         return point_base_link
-    
+
     def transform_location_base2cam(self, x, y, z):
         """
         transform from arm base frame to camera optical frame
@@ -423,7 +424,9 @@ class VisionNode(Node):
         # apply intrinsic transform:
         point_camera_frame = point_camera_frame[:3] / point_camera_frame[3]
         point_img_frame = self.K @ point_camera_frame
-        point_img_frame = point_img_frame[:2] / point_img_frame[2]  # Homogenize the point
+        point_img_frame = (
+            point_img_frame[:2] / point_img_frame[2]
+        )  # Homogenize the point
         return point_img_frame
 
     def handle_pickup_point(self, request, response):
@@ -516,8 +519,8 @@ class VisionNode(Node):
 
                 self.get_logger().info(f"Segmenting bread")
 
-                cam_x, cam_y = (
-                    self.bread_segment_generator.get_bread_pickup_point(image)
+                cam_x, cam_y = self.bread_segment_generator.get_bread_pickup_point(
+                    image
                 )
 
                 # Save images for debugging
@@ -552,7 +555,7 @@ class VisionNode(Node):
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.01 if bin_id == BREAD_BIN_ID else 0.005 #TODO: tune these
+            z_offset = 0.01 if bin_id == BREAD_BIN_ID else 0.005  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
@@ -618,7 +621,7 @@ class VisionNode(Node):
                 image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
                 self.get_logger().info(f"Segmenting Bread")
                 mask = self.bread_segment_generator.get_bread_placement_mask(image)
-                
+
                 self.get_logger().info(f"Bread segmentation completed")
 
                 # Average the positions of white points to get center
