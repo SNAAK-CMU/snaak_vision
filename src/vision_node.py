@@ -299,15 +299,15 @@ class VisionNode(Node):
 
         # Retrieve depth value at (x, y)
         self.get_logger().info(f"Getting Depth at ({x}, {y})")
-        
+
         depth_sum = 0
         num_valid_depths = 0
-        for img in self.depth_queue:  
+        for img in self.depth_queue:
             res = get_averaged_depth(img, x, y)
             if res != -1:
                 depth_sum += res
                 num_valid_depths += 1
-                
+
         if num_valid_depths == 0:
             raise ValueError("No Valid Depth Points")
         depth = depth_sum / num_valid_depths
@@ -318,8 +318,10 @@ class VisionNode(Node):
     def handle_sandwich_check(self, request, response):
         try:
             ingredient_name = request.ingredient_name
+            ingredient_count = request.ingredient_count
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
+            self.get_logger().info(f"Ingredient count: {ingredient_count}")
 
             if ingredient_name == "bread_bottom":
                 # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
@@ -331,7 +333,7 @@ class VisionNode(Node):
                 self.sandwich_checker.set_tray_center(tray_center_cam)
 
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
-                image=image, ingredient_name=ingredient_name
+                image=image, ingredient_name=ingredient_name, ingredient_count
             )
             # ingredient_check = True
             # check_image = None
@@ -544,15 +546,15 @@ class VisionNode(Node):
                     # mask everything but the bin
                     bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
-                        CHEESE_BIN_YMIN : CHEESE_BIN_YMAX,
-                        CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
+                        CHEESE_BIN_YMIN:CHEESE_BIN_YMAX,
+                        CHEESE_BIN_XMIN:CHEESE_BIN_XMAX,
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
-                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR)
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
 
                     mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
@@ -614,11 +616,11 @@ class VisionNode(Node):
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image.copy()
 
-                     # mask everything but the bin
+                    # mask everything but the bin
                     bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
-                        HAM_BIN_YMIN : HAM_BIN_YMAX,
-                        HAM_BIN_XMIN : HAM_BIN_XMAX,
+                        HAM_BIN_YMIN:HAM_BIN_YMAX,
+                        HAM_BIN_XMIN:HAM_BIN_XMAX,
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
