@@ -286,10 +286,16 @@ class VisionNode(Node):
         self.get_logger().info(f"Getting Depth at ({x}, {y})")
         
         depth_sum = 0
-        for img in self.depth_queue:
-            depth_sum += get_averaged_depth(img, x, y)
-
-        depth = depth_sum / n
+        num_valid_depths = 0
+        for img in self.depth_queue:  
+            res = get_averaged_depth(img, x, y)
+            if res != -1:
+                depth_sum += res
+                num_valid_depths += 1
+                
+        if num_valid_depths == 0:
+            raise ValueError("No Valid Depth Points")
+        depth = depth_sum / num_valid_depths
 
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
         return depth
