@@ -16,6 +16,7 @@ from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from PIL import Image as Im
 import os
+from collections import deque
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -42,6 +43,8 @@ from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 from sandwich_checker import SandwichChecker
 
 ############### Parameters #################
+
+USE_UNET = True  # Set to True to use UNet, False to use SAM
 
 # Make these config
 HAM_BIN_ID = 1
@@ -89,6 +92,7 @@ class VisionNode(Node):
         super().__init__("snaak_vision")
         self.bridge = CvBridge()
         self.depth_image = None
+        self.depth_queue = deque()
         self.rgb_image = None
 
         # camera FOV over assembly area
@@ -113,15 +117,17 @@ class VisionNode(Node):
         self.detection_image_count = 0
 
         # init segmentation objects
-        self.use_SAM = False
-        self.cheese_segment_generator = CheeseSegmentGenerator()
+        self.use_SAM = not USE_UNET
+        self.cheese_segment_generator = (
+            CheeseSegmentGenerator() if self.use_SAM else None
+        )
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
         self.plate_bread_segment_generator = PlateBreadSegementGenerator()
-        self.meat_segment_generator = MeatSegmentGenerator()
+        self.meat_segment_generator = MeatSegmentGenerator() if self.use_SAM else None
 
         # init UNet
-        self.use_UNet = True
+        self.use_UNet = USE_UNET
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
@@ -259,11 +265,15 @@ class VisionNode(Node):
             self.depth_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
             )
+            self.depth_queue.append(self.depth_image)
+            if len(self.depth_queue) > 5:
+                self.depth_queue.popleft()
+
         except CvBridgeError as e:
             self.get_logger().error(
                 f"Failed to convert depth message to OpenCV format: {e}"
             )
-            self.rgb_image = None
+            self.depth_image = None
 
     def rgb_callback(self, msg):
         """Convert ROS Image message to OpenCV format"""
@@ -297,9 +307,10 @@ class VisionNode(Node):
         :return: Depth value in meters
         """
         # Check if depth image is available
-        if self.depth_image is None:
+        n = len(self.depth_queue)
+        if n == 0:
             self.get_logger().warn("Depth image not available yet!")
-            return float("nan")
+            raise ValueError("Depth image not available yet")
 
         # Ensure coordinates are within bounds of the image dimensions
         if not is_point_within_bounds(self.depth_image, x, y):
@@ -308,15 +319,28 @@ class VisionNode(Node):
         # Retrieve depth value at (x, y)
         self.get_logger().info(f"Getting Depth at ({x}, {y})")
 
-        depth = get_averaged_depth(self.depth_image, x, y)
+        depth_sum = 0
+        num_valid_depths = 0
+        for img in self.depth_queue:
+            res = get_averaged_depth(img, x, y)
+            if res != -1:
+                depth_sum += res
+                num_valid_depths += 1
+
+        if num_valid_depths == 0:
+            raise ValueError("No Valid Depth Points")
+        depth = depth_sum / num_valid_depths
+
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
         return depth
 
     def handle_sandwich_check(self, request, response):
         try:
             ingredient_name = request.ingredient_name
+            ingredient_count = request.ingredient_count
             image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
+            self.get_logger().info(f"Ingredient count: {ingredient_count}")
 
             if ingredient_name == "bread_bottom":
                 # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
@@ -328,7 +352,7 @@ class VisionNode(Node):
                 self.sandwich_checker.set_tray_center(tray_center_cam)
 
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
-                image=image, ingredient_name=ingredient_name
+                image=image, ingredient_name=ingredient_name, ingredient_count=ingredient_count
             )
             # ingredient_check = True
             # check_image = None
@@ -541,8 +565,8 @@ class VisionNode(Node):
                     # mask everything but the bin
                     bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
-                        CHEESE_BIN_YMIN : CHEESE_BIN_YMAX,
-                        CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
+                        CHEESE_BIN_YMIN:CHEESE_BIN_YMAX,
+                        CHEESE_BIN_XMIN:CHEESE_BIN_XMAX,
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
@@ -579,7 +603,7 @@ class VisionNode(Node):
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
-                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR)
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
                     
                     self.get_logger().info("Got mask from UNet, Cheese Area: {max_contour_area}")
@@ -639,11 +663,11 @@ class VisionNode(Node):
                     # TODO: change UNet to work with cv2 images
                     unet_input_image = self.rgb_image.copy()
 
-                     # mask everything but the bin
+                    # mask everything but the bin
                     bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
-                        HAM_BIN_YMIN : HAM_BIN_YMAX,
-                        HAM_BIN_XMIN : HAM_BIN_XMAX,
+                        HAM_BIN_YMIN:HAM_BIN_YMAX,
+                        HAM_BIN_XMIN:HAM_BIN_XMAX,
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
@@ -752,7 +776,9 @@ class VisionNode(Node):
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
-            self.get_logger().info(f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}")
+            self.get_logger().info(
+                f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}"
+            )
 
             self.get_logger().info("transforming coordinates...")
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
@@ -833,7 +859,6 @@ class VisionNode(Node):
         try:
             location_id = request.location_id
             timestamp = request.timestamp  # use this to sync
-            depth_image = self.depth_image
 
             image = self.rgb_image
             self.get_logger().info(
@@ -892,15 +917,13 @@ class VisionNode(Node):
             # get depth
             cam_z = self.get_depth(cam_x, cam_y)
 
-
             # transform coordinates
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
-
 
             # verify depth
             if not cam_z > 0.25 and cam_z < 0.35:
                 raise Exception("Incorrect Depth Value")
-            
+
             self.get_logger().info("got transform, applying it to point...")
 
             response.x = response_transformed[0]
