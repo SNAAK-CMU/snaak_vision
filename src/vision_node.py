@@ -16,6 +16,7 @@ from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from PIL import Image as Im
 import os
+from collections import deque
 
 
 from rclpy.qos import QoSProfile, DurabilityPolicy
@@ -69,6 +70,7 @@ class VisionNode(Node):
         super().__init__("snaak_vision")
         self.bridge = CvBridge()
         self.depth_image = None
+        self.depth_queue = deque()
         self.rgb_image = None
 
         # camera FOV over assembly area
@@ -229,11 +231,15 @@ class VisionNode(Node):
             self.depth_image = self.bridge.imgmsg_to_cv2(
                 msg, desired_encoding="passthrough"
             )
+            self.depth_queue.append(self.depth_image)
+            if len(self.depth_queue > 5):
+                self.depth_queue.popleft()
+
         except CvBridgeError as e:
             self.get_logger().error(
                 f"Failed to convert depth message to OpenCV format: {e}"
             )
-            self.rgb_image = None
+            self.depth_image = None
 
     def rgb_callback(self, msg):
         """Convert ROS Image message to OpenCV format"""
@@ -267,9 +273,10 @@ class VisionNode(Node):
         :return: Depth value in meters
         """
         # Check if depth image is available
-        if self.depth_image is None:
+        n = len(self.depth_queue)
+        if n == 0:
             self.get_logger().warn("Depth image not available yet!")
-            return float("nan")
+            raise ValueError("Depth image not available yet")
 
         # Ensure coordinates are within bounds of the image dimensions
         if not is_point_within_bounds(self.depth_image, x, y):
@@ -277,8 +284,13 @@ class VisionNode(Node):
 
         # Retrieve depth value at (x, y)
         self.get_logger().info(f"Getting Depth at ({x}, {y})")
+        
+        depth_sum = 0
+        for img in self.depth_queue:
+            depth_sum += get_averaged_depth(img, x, y)
 
-        depth = get_averaged_depth(self.depth_image, x, y)
+        depth = depth_sum / n
+
         self.get_logger().info(f"Depth at ({x}, {y}): {depth} meters")
         return depth
 
@@ -719,7 +731,6 @@ class VisionNode(Node):
         try:
             location_id = request.location_id
             timestamp = request.timestamp  # use this to sync
-            depth_image = self.depth_image
 
             image = self.rgb_image
             self.get_logger().info(
