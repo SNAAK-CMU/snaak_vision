@@ -243,7 +243,7 @@ class VisionNode(Node):
                 msg, desired_encoding="passthrough"
             )
             self.depth_queue.append(self.depth_image)
-            if len(self.depth_queue > 5):
+            if len(self.depth_queue) > 5:
                 self.depth_queue.popleft()
 
         except CvBridgeError as e:
