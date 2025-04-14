@@ -74,6 +74,13 @@ HAM_BIN_YMIN = 0
 HAM_BIN_XMAX = 450
 HAM_BIN_YMAX = 330
 
+# Cheese Dimensions in metres
+CHEESE_WIDTH = 0.090
+CHEESE_HEIGHT = 0.095
+
+# Ham Dimensions in metres
+# 1098 pix/m ; ham_radius = 52 pix
+HAM_RADIUS = 0.05 # metres
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -92,6 +99,16 @@ class VisionNode(Node):
         self.fov_w = FOV_WIDTH  # metres
         self.fov_h = FOV_HEIGHT  # metres
         self.threshold_in_cm = SW_CHECKER_THRESHOLD
+        
+        # meters/pixel
+        self.pixels_to_m = ((FOV_WIDTH / IMG_WIDTH) + (FOV_HEIGHT / IMG_HEIGHT)) / 2 # how many metres per pixel
+        
+        # ingredient dimensions
+        self.cheese_width = CHEESE_WIDTH
+        self.cheese_height = CHEESE_HEIGHT
+        self.ham_radius = HAM_RADIUS
+        self.cheese_area_pixels = self.cheese_width * self.cheese_height * (1 / self.pixels_to_m**2)
+        self.ham_area_pixels = np.pi * (self.ham_radius**2) * (1 / self.pixels_to_m**2)
 
         # image size
         self.image_width = IMG_WIDTH
@@ -134,6 +151,8 @@ class VisionNode(Node):
             image_width=self.image_width,
             image_height=self.image_height,
             node_logger=self.get_logger(),
+            cheese_dims_m=[self.cheese_width, self.cheese_height],
+            pixel_to_m=self.pixels_to_m,
         )
 
         # init control variables
@@ -551,17 +570,45 @@ class VisionNode(Node):
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
+                    mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
+                        Im.fromarray(unet_input_image), [250, 250, 55]
+                    )
+                    
+                    if max_contour_area > 1.5 * self.cheese_area_pixels:
+                        self.get_logger().info(
+                            f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 25% of bin and trying again..."
+                        )
+                        
+                        # crop out bottom 33% of the bin 
+                        bin_mask = np.zeros_like(unet_input_image)
+                        bin_mask[
+                            CHEESE_BIN_YMIN : CHEESE_BIN_YMAX - (CHEESE_BIN_YMAX - CHEESE_BIN_YMIN) // 3,
+                            CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
+                        ] = 255
+                        unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
+                        
+                        mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
+                        Im.fromarray(unet_input_image), [250, 250, 55]
+                        )
+                        
+                        if max_contour_area > 1.5 * self.cheese_area_pixels:
+                            self.get_logger().info(
+                                f"Cheese area is still too large: {max_contour_area} > {self.cheese_area_pixels}, skipping this image..."
+                            )
+                            raise Exception(
+                                f"Cheese area after 66% crop is still too large: {max_contour_area} > {self.cheese_area_pixels}"
+                            )
+                        
+                        
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
                         cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
-
-                    mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
-                        Im.fromarray(unet_input_image), [250, 250, 55]
-                    )
+                    
+                    self.get_logger().info("Got mask from UNet, Cheese Area: {max_contour_area}")
+                    
                     mask = max_contour_mask  # choose the largest contour
-                    self.get_logger().info("Got mask from UNet")
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
                     raise Exception("No segmentation method chosen")
@@ -624,16 +671,42 @@ class VisionNode(Node):
                     ] = 255
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
+                    mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
+                        Im.fromarray(unet_input_image), [61, 61, 245]
+                    )
+                    
+                    if max_contour_area > 1.5 * self.ham_area_pixels:
+                        self.get_logger().info(
+                            f"Ham area is too large: {max_contour_area} > {self.ham_area_pixels}, cropping out bottom 25% of bin and trying again..."
+                        )
+                        
+                        # crop out bottom 25% of the bin 
+                        bin_mask = np.zeros_like(unet_input_image)
+                        bin_mask[
+                            HAM_BIN_YMIN : HAM_BIN_YMAX - (HAM_BIN_YMAX - HAM_BIN_YMIN) // 4,
+                            HAM_BIN_XMIN : HAM_BIN_XMAX,
+                        ] = 255
+                        unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
+                        
+                        mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
+                            Im.fromarray(unet_input_image), [61, 61, 245]
+                        )
+                        
+                        if max_contour_area > 1.5 * self.ham_area_pixels:
+                            self.get_logger().info(
+                                f"Ham area is still too large: {max_contour_area} > {self.ham_area_pixels}, skipping this image..."
+                            )
+                            raise Exception(
+                                f"Ham area after 75% crop is still too large: {max_contour_area} > {self.ham_area_pixels}"
+                            )
+                    
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_input_image.jpg",
                         cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
-
-                    mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
-                        Im.fromarray(unet_input_image), [61, 61, 245]
-                    )
-                    self.get_logger().info("Got mask from UNet")
+                    
+                    self.get_logger().info("Got mask from UNet, Ham Area: {max_contour_area}")
                     mask = max_contour_mask
                     mask_truth_value = np.max(mask)
 
