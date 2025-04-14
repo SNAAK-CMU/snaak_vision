@@ -420,7 +420,7 @@ def is_point_within_bounds(img, x, y):
     else:
         return True
     
-def get_averaged_depth(depth_image, x, y, kernel_size = 3):
+def get_averaged_depth(depth_image, x, y, kernel_size = 9):
     # Do an average of the kernel_sizexkernel_size window around x, y
     y_min = max(0, y - kernel_size // 2)
     y_max = min(depth_image.shape[0], y + kernel_size // 2)
@@ -436,7 +436,7 @@ def get_averaged_depth(depth_image, x, y, kernel_size = 3):
     num_valid_points = np.sum(valid_window)
 
     if num_valid_points == 0:
-        raise Exception("No valid depth value found")
+        return -1
     
     depth = float((total_sum / num_valid_points) / 1000)
     return depth
