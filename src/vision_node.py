@@ -43,6 +43,8 @@ from sandwich_checker import SandwichChecker
 
 ############### Parameters #################
 
+USE_UNET = True  # Set to True to use UNet, False to use SAM
+
 # Make these config
 HAM_BIN_ID = 1
 CHEESE_BIN_ID = 2
@@ -83,15 +85,17 @@ class VisionNode(Node):
         self.detection_image_count = 0
 
         # init segmentation objects
-        self.use_SAM = False
-        self.cheese_segment_generator = CheeseSegmentGenerator()
+        self.use_SAM = not USE_UNET
+        self.cheese_segment_generator = (
+            CheeseSegmentGenerator() if self.use_SAM else None
+        )
         self.tray_segment_generator = TraySegmentGenerator()
         self.bread_segment_generator = BreadSegmentGenerator()
         self.plate_bread_segment_generator = PlateBreadSegementGenerator()
-        self.meat_segment_generator = MeatSegmentGenerator()
+        self.meat_segment_generator = MeatSegmentGenerator() if self.use_SAM else None
 
         # init UNet
-        self.use_UNet = True
+        self.use_UNet = USE_UNET
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
@@ -117,7 +121,7 @@ class VisionNode(Node):
             node_logger=self.get_logger(),
         )
 
-# Removed redundant initialization of sandwich_checker
+        # Removed redundant initialization of sandwich_checker
 
         # init control variables
         self.assembly_tray_box = None
@@ -638,7 +642,9 @@ class VisionNode(Node):
 
             if cam_z == 0:
                 raise Exception("Invalid Z")
-            self.get_logger().info(f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}")
+            self.get_logger().info(
+                f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}"
+            )
 
             self.get_logger().info("transforming coordinates...")
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
@@ -778,15 +784,13 @@ class VisionNode(Node):
             # get depth
             cam_z = self.get_depth(cam_x, cam_y)
 
-
             # transform coordinates
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
-
 
             # verify depth
             if not cam_z > 0.25 and cam_z < 0.35:
                 raise Exception("Incorrect Depth Value")
-            
+
             self.get_logger().info("got transform, applying it to point...")
 
             response.x = response_transformed[0]
