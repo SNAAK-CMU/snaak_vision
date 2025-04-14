@@ -61,6 +61,19 @@ IMG_HEIGHT = 480
 
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
+# Cheese bin coords
+CHEESE_BIN_XMIN = 250
+CHEESE_BIN_YMIN = 0
+CHEESE_BIN_XMAX = 470
+CHEESE_BIN_YMAX = 340
+
+# Ham bin coords
+HAM_BIN_XMIN = 240
+HAM_BIN_YMIN = 0
+HAM_BIN_XMAX = 450
+HAM_BIN_YMAX = 330
+
+
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
 ############################################
@@ -120,8 +133,6 @@ class VisionNode(Node):
             image_height=self.image_height,
             node_logger=self.get_logger(),
         )
-
-        # Removed redundant initialization of sandwich_checker
 
         # init control variables
         self.assembly_tray_box = None
@@ -510,7 +521,22 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
-                    unet_input_image = self.rgb_image
+                    unet_input_image = self.rgb_image.copy()
+
+                    # mask everything but the bin
+                    bin_mask = np.zeros_like(unet_input_image)
+                    bin_mask[
+                        CHEESE_BIN_YMIN : CHEESE_BIN_YMAX,
+                        CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
+                    ] = 255
+                    unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
+
+                    # save image for debugging
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR)
+                    )
+
                     mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [250, 250, 55]
                     )
@@ -522,7 +548,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_source_image.jpg",
                     image,
                 )
                 cv2.imwrite(
@@ -568,7 +594,22 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
-                    unet_input_image = self.rgb_image
+                    unet_input_image = self.rgb_image.copy()
+
+                     # mask everything but the bin
+                    bin_mask = np.zeros_like(unet_input_image)
+                    bin_mask[
+                        HAM_BIN_YMIN : HAM_BIN_YMAX,
+                        HAM_BIN_XMIN : HAM_BIN_XMAX,
+                    ] = 255
+                    unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
+
+                    # save image for debugging
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_input_image.jpg",
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
+                    )
+
                     mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
                         Im.fromarray(unet_input_image), [61, 61, 245]
                     )
@@ -593,7 +634,7 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_source_image.jpg",
                     image,
                 )
 
@@ -650,7 +691,7 @@ class VisionNode(Node):
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.01  # TODO: tune these
+            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.008  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
