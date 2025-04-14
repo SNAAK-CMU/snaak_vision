@@ -517,20 +517,20 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
-                    unet_input_image = self.rgb_image
+                    unet_input_image = self.rgb_image.copy()
 
                     # mask everything but the bin
-                    bin_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+                    bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
                         CHEESE_BIN_YMIN : CHEESE_BIN_YMAX,
                         CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
                     ] = 255
-                    unet_input_image = cv2.bitwise_and(mask, unet_input_image)
+                    unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
-                        unet_input_image,
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR)
                     )
 
                     mask, max_contour_mask = self.Cheese_UNet.get_top_layer_binary(
@@ -590,20 +590,20 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # PIL stores images as RGB, OpenCV stores as BGR
                     # TODO: change UNet to work with cv2 images
-                    unet_input_image = self.rgb_image
+                    unet_input_image = self.rgb_image.copy()
 
                      # mask everything but the bin
-                    bin_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+                    bin_mask = np.zeros_like(unet_input_image)
                     bin_mask[
                         HAM_BIN_YMIN : HAM_BIN_YMAX,
                         HAM_BIN_XMIN : HAM_BIN_XMAX,
                     ] = 255
-                    unet_input_image = cv2.bitwise_and(mask, unet_input_image)
+                    unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
                     # save image for debugging
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_input_image.jpg",
-                        unet_input_image,
+                        cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
 
                     mask, max_contour_mask = self.Bologna_UNet.get_top_layer_binary(
@@ -685,7 +685,7 @@ class VisionNode(Node):
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.01  # TODO: tune these
+            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.008  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
