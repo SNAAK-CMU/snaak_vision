@@ -30,7 +30,9 @@ TRAY_BOX_PIX = (
 
 CHEESE_W = 97  # width of the cheese slice in pixels
 
-SAM2_CHECKPOINT = "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt
+SAM2_CHECKPOINT = (
+    "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
+)
 SAM2_MODEL_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
 ################################
