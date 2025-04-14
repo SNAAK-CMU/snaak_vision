@@ -333,7 +333,7 @@ class VisionNode(Node):
                 self.sandwich_checker.set_tray_center(tray_center_cam)
 
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
-                image=image, ingredient_name=ingredient_name, ingredient_count
+                image=image, ingredient_name=ingredient_name, ingredient_count=ingredient_count
             )
             # ingredient_check = True
             # check_image = None
