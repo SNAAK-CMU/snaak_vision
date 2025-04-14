@@ -2,6 +2,10 @@
 
 import numpy as np
 import cv2
+import torch
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+
 import segmentation.segment_utils as seg_utils
 from segmentation.segment_utils import segment_from_hsv, convert_mask_to_orig_dims
 
@@ -26,6 +30,11 @@ TRAY_BOX_PIX = (
 
 CHEESE_W = 97  # width of the cheese slice in pixels
 
+SAM2_CHECKPOINT = (
+    "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
+)
+SAM2_MODEL_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
+
 ################################
 
 
@@ -48,7 +57,6 @@ class SandwichChecker:
         self.tray_hsv_upper_bound = TRAY_HSV_UPPER_BOUND
         self.bread_hsv_lower_bound = BREAD_HSV_LOWER_BOUND
         self.bread_hsv_upper_bound = BREAD_HSV_UPPER_BOUND
-
         self.crop_xmin, self.crop_ymin, self.crop_xmax, self.crop_ymax = TRAY_BOX_PIX
 
         self.fov_width = fov_width
@@ -56,37 +64,27 @@ class SandwichChecker:
         self.threshold_in_cm = threshold_in_cm
         self.image_height = image_height
         self.image_width = image_width
-
         self.tray_center = tray_center
-
         self.pix_per_m = (
             (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
         ) / 2
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
+        self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
 
-        # Calculate the area of the tray and bread in pixels
-        self.tray_area = tray_dims_m[0] * tray_dims_m[1] * self.pix_per_m**2
-        self.bread_area = bread_dims_m[0] * bread_dims_m[1] * self.pix_per_m**2
-        self.cheese_area = cheese_dims_m[0] * cheese_dims_m[1] * self.pix_per_m**2
-        self.min_tray_area = 0.9 * self.tray_area
-        self.max_tray_area = 1.2 * self.tray_area
-        self.min_bread_area = 0.9 * self.bread_area
-        self.max_bread_area = 2.0 * self.bread_area
-        self.min_cheese_area = 0.7 * self.cheese_area
-        self.max_cheese_area = 1.4 * self.cheese_area
-
+        # Initialize localization lists
         self.tray_contours = []
-
         self.bread_contours = []
         self.bread_centers = []
-
         self.cheese_contours = []
         self.cheese_centers = []
-
         self.ham_contours = []
         self.ham_centers = []
-
         self.place_images = []
+
+        # Initialize SAM2
+        self.sam2_checkpoint = SAM2_CHECKPOINT
+        self.model_cfg = SAM2_MODEL_CFG
+        self.__create_sam_predictor()
 
         self.node_logger = node_logger
         if self.node_logger is not None:
@@ -99,6 +97,28 @@ class SandwichChecker:
             self.node_logger.info(
                 f"Calculated tray_area={self.tray_area}, bread_area={self.bread_area}, cheese_area={self.cheese_area}"
             )
+
+    def __calc_area_thresholds(self, tray_dims_m, bread_dims_m, cheese_dims_m):
+        """
+        Calculate the area thresholds for tray, bread and cheese
+        """
+        self.tray_area = tray_dims_m[0] * tray_dims_m[1] * self.pix_per_m**2
+        self.bread_area = bread_dims_m[0] * bread_dims_m[1] * self.pix_per_m**2
+        self.cheese_area = cheese_dims_m[0] * cheese_dims_m[1] * self.pix_per_m**2
+        self.min_tray_area = 0.9 * self.tray_area
+        self.max_tray_area = 1.2 * self.tray_area
+        self.min_bread_area = 0.9 * self.bread_area
+        self.max_bread_area = 2.0 * self.bread_area
+        self.min_cheese_area = 0.7 * self.cheese_area
+        self.max_cheese_area = 1.4 * self.cheese_area
+
+    def __create_sam_predictor(self):
+        """
+        Initializes and loads SAM2 model
+        """
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        sam2_model = build_sam2(self.model_cfg, self.sam2_checkpoint, device=device)
+        self.predictor = SAM2ImagePredictor(sam2_model)
 
     def reset(self):
         self.tray_contour = []
@@ -203,14 +223,10 @@ class SandwichChecker:
             bread_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
 
-        plot_image = image.copy()
+        plot_image = second_crop.copy()
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
             hull = cv2.convexHull(largest_contour)
-
-            # Shift the hull coordinates to the original image coordinates
-            hull[:, :, 0] += TRAY_BOX_PIX[0]
-            hull[:, :, 1] += TRAY_BOX_PIX[1]
 
             M = cv2.moments(hull)
             if M["m00"] != 0:
@@ -219,8 +235,83 @@ class SandwichChecker:
             else:
                 cX, cY = 0, 0
 
-            cv2.drawContours(plot_image, [hull], -1, (255, 0, 0), 3)
-            cv2.circle(plot_image, (cX, cY), 7, (0, 0, 255), -1)
+            # cv2.drawContours(plot_image, [hull], -1, (255, 0, 0), 3)
+            # cv2.circle(plot_image, (cX, cY), 7, (0, 0, 255), -1)
+            # cv2.imshow("Plot Image", plot_image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+
+        # Use SAM2 to localize bread
+        input_points = np.array([[cX, cY]], dtype=np.float32)
+        input_labels = np.array([1], dtype=np.int32)
+        self.predictor.set_image(second_crop)
+        masks, scores, logits = self.predictor.predict(
+            point_coords=input_points,
+            point_labels=input_labels,
+            multimask_output=True,
+        )
+        sorted_ind = np.argsort(scores)[::-1]
+        masks = masks[sorted_ind]
+        scores = scores[sorted_ind]
+        logits = logits[sorted_ind]
+
+        # Select mask using area heuristic
+        area_gt = 12500
+        area_diff_min = 100000000
+        selected_mask = masks[0]
+        for i, mask in enumerate(masks):
+            area_mask = np.sum(mask)
+            area_diff = abs(area_mask - area_gt)
+            if area_diff < area_diff_min:
+                selected_mask = mask
+                area_diff_min = area_diff
+
+        # Convert mask to compatible format
+        selected_mask = selected_mask * 255
+        selected_mask = selected_mask.astype(np.uint8)
+
+        # Remove noise from mask
+        kernel = np.ones((5, 5), np.uint8)
+        selected_mask = cv2.erode(selected_mask, kernel, iterations=1)
+        selected_mask = cv2.dilate(selected_mask, kernel, iterations=1)
+
+        # Select the largest contour and blacken out the rest
+        contours, _ = cv2.findContours(
+            selected_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            selected_mask = np.zeros_like(selected_mask)
+            cv2.drawContours(selected_mask, [largest_contour], -1, 255, -1)
+
+        # Convert mask to original image dimensions
+        orig_mask = convert_mask_to_orig_dims(
+            selected_mask,
+            image,
+            TRAY_BOX_PIX[0],
+            TRAY_BOX_PIX[1],
+            TRAY_BOX_PIX[2],
+            TRAY_BOX_PIX[3],
+        )
+
+        # Find countours in the original mask
+        contours, _ = cv2.findContours(
+            orig_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        plot_image = image.copy()
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            cv2.drawContours(plot_image, [largest_contour], -1, (0, 255, 0), 3)
+
+            # Find the center of the convex hull
+            M = cv2.moments(largest_contour)
+            if M["m00"] != 0:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+            else:
+                cX, cY = 0, 0
+
+        cv2.circle(plot_image, (cX, cY), 7, (0, 0, 255), -1)
 
         return (cX, cY), plot_image
 
