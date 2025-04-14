@@ -30,9 +30,7 @@ TRAY_BOX_PIX = (
 
 CHEESE_W = 97  # width of the cheese slice in pixels
 
-SAM2_CHECKPOINT = (
-    "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
-)
+SAM2_CHECKPOINT = "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt
 SAM2_MODEL_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
 ################################
@@ -451,6 +449,7 @@ class SandwichChecker:
 
     def check_bread_top(self, image):
         bread_center, plot_image = self.get_bread_top_placement_xy(image)
+        bottom_bread_center = self.bread_centers[-1]
         self.bread_centers.append(bread_center)
 
         # Check if bread is placed in tray
@@ -458,21 +457,21 @@ class SandwichChecker:
 
         # measure distance between bread center and tray center
         distance = -1
-        if self.tray_center is not None:
+        if bottom_bread_center is not None:
             distance = (
-                (self.tray_center[0] - bread_center[0]) ** 2
-                + (self.tray_center[1] - bread_center[1]) ** 2
+                (bottom_bread_center[0] - bread_center[0]) ** 2
+                + (bottom_bread_center[1] - bread_center[1]) ** 2
             ) ** 0.5
             self.node_logger.info(
-                f"Distance between bread center {bread_center} and tray center {self.tray_center}: {distance}"
+                f"Distance between top bread center {bread_center} and bottom bread center {bottom_bread_center}: {distance}"
             )
             if distance > self.pass_threshold:
                 bread_on_tray = False
 
-        if self.tray_center is not None:
+        if bottom_bread_center is not None:
             cv2.circle(
                 image,
-                (int(self.tray_center[0]), int(self.tray_center[1])),
+                (int(bottom_bread_center[0]), int(bottom_bread_center[1])),
                 5,
                 (0, 255, 0),
                 -1,
