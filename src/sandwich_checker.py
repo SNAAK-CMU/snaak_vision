@@ -5,6 +5,7 @@ import cv2
 import torch
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
+from PIL import Image as Im
 
 import segmentation.segment_utils as seg_utils
 from segmentation.segment_utils import segment_from_hsv, convert_mask_to_orig_dims
@@ -76,7 +77,7 @@ class SandwichChecker:
         self.pix_per_m = (
             (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
         ) / 2
-       
+
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
         self.ham_radius_pix = ham_radius * self.pix_per_m
@@ -350,68 +351,6 @@ class SandwichChecker:
 
         # TODO: handle case when bread or tray are not detected in image
 
-        # contours, heirarchy = seg_utils.contour_segmentation(
-        #     image,
-        #     show_image=True,
-        #     show_separate_contours=True,
-        #     show_steps=True,
-        #     segment_type="edges",
-        #     edges_thresholds=(15, 30),
-        # )
-
-        # # Extract tray ROIs
-        # tray_contour_indices = [
-        #     i
-        #     for i, contour in enumerate(contours)
-        #     if self.min_tray_area < cv2.contourArea(contour) < self.max_tray_area
-        # ]
-        # self.tray_contours = [contours[i] for i in tray_contour_indices]
-        # self.node_logger.info(f"Number of tray contours: {len(self.tray_contours)}")
-
-        # # Extract bread ROIs
-        # bread_contour_indices = [
-        #     i
-        #     for i, contour in enumerate(contours)
-        #     if 0.7*self.bread_area < cv2.contourArea(contour) < 2.0*self.bread_area
-        # ]
-        # # get mask of bread ROIs
-        # bread_mask = np.zeros(image.shape[:2], dtype=np.uint8)
-        # for i in bread_contour_indices:
-        #     cv2.fillPoly(bread_mask, [contours[i]], 255)
-
-        # # ROIs image
-        # masked_image = cv2.bitwise_and(image, image, mask=bread_mask)
-
-        # # get contours of ROIs image
-        # contours, heirarchy = seg_utils.contour_segmentation(
-        #     masked_image,
-        #     show_image=True,
-        #     show_separate_contours=True,
-        #     show_steps=True,
-        #     segment_type="binary",
-        # )
-
-        # # Extract bread contours
-        # bread_contour_indices = [
-        #     i
-        #     for i, contour in enumerate(contours)
-        #     if 0.7*self.bread_area < cv2.contourArea(contour) < 1.6*self.bread_area
-        # ]
-
-        # self.bread_contours = [contours[i] for i in bread_contour_indices]
-        # self.node_logger.info(f"Number of bread contours: {len(self.tray_contours)}")
-
-        # for bread_contour in self.bread_contours:
-        #     # Calculate the center of the bread contour
-        #     M = cv2.moments(bread_contour)
-        #     if M["m00"] != 0:
-        #         cx = int(M["m10"] / M["m00"])
-        #         cy = int(M["m01"] / M["m00"])
-        #     else:
-        #         cx, cy = 0, 0
-
-        #     self.bread_centers.append((cx, cy))
-
         bread_mask = self.get_bread_placement_mask_bottom(image)
         y_coords, x_coords = np.where(bread_mask == 255)
         center_x = int(np.mean(x_coords))
@@ -552,8 +491,77 @@ class SandwichChecker:
         # TODO: handle case when no cheese is detected in image
 
         if self.use_unet:
-            pass
-            cheese_center = (0,0)
+            # convert image to RGB
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+            assembly_mask = np.zeros_like(image_rgb)
+            assembly_mask = assembly_mask[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ] = 255
+            unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
+
+            # Get the cheese mask using UNet
+            mask, max_contour_mask, max_contour_area = (
+                self.Cheese_UNet.get_top_layer_binary(
+                    Im.fromarray(unet_input_image), [250, 250, 55]
+                )
+            )
+
+            # if max_contour_area > 1.2 * self.cheese_area_pixels:
+            #             self.get_logger().info(
+            #                 f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 50% of bin and trying again..."
+            #             )
+
+            #             # crop out bottom 50% of the bin
+            #             bin_mask = np.zeros_like(unet_input_image)
+            #             bin_mask[
+            #                 TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3] // 2, # crop out bottom 50%
+            #                 TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2],
+            #             ] = 255
+            #             unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
+
+            #             mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
+            #             Im.fromarray(unet_input_image), [250, 250, 55]
+            #             )
+
+            #             if max_contour_area > 1.2 * self.cheese_area_pixels:
+            #                 self.get_logger().info(
+            #                     f"Cheese area is still too large: {max_contour_area} > {self.cheese_area_pixels}, skipping this image..."
+            #                 )
+            #                 raise Exception(
+            #                     f"Cheese area after 50% crop is still too large: {max_contour_area} > {self.cheese_area_pixels}"
+            #                 )
+
+            # choose the largest contour
+            mask = max_contour_mask
+            self.node_logger.info(
+                "Assembly cheese mask area: {}".format(max_contour_area)
+            )
+
+            # save images for debugging
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_input_image",
+                unet_input_image,
+            )
+
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_mask.jpg",
+                mask,
+            )
+
+            # check mask
+            mask_truth_value = np.max(mask)
+            if mask_truth_value == 0:
+                raise Exception(
+                    "UNet did not detect any cheese in assembly area. Please check the image."
+                )
+
+            # get center
+            y_coords, x_coords = np.where(mask == mask_truth_value)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
+            cheese_center = (cam_x, cam_y)
+
         else:
 
             # get images
@@ -576,7 +584,9 @@ class SandwichChecker:
             second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
             tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
             tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
-            tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+            tray_mask = cv2.inRange(
+                second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound
+            )
 
             # Invert the tray mask
             tray_mask_inv = cv2.bitwise_not(tray_mask)
@@ -601,8 +611,12 @@ class SandwichChecker:
 
             # Segment bread using strict hsv bounds (to differentiate between bread and cheese)
             second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
-            bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8)
-            bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8)
+            bread_hsv_lower_bound = np.array(
+                BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8
+            )
+            bread_hsv_upper_bound = np.array(
+                BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8
+            )
             bread_mask = cv2.inRange(
                 second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
             )
@@ -629,7 +643,9 @@ class SandwichChecker:
             best_cheese_box = None
 
             # Slide the cheese box over the image
-            for col in range(0, gray_diff.shape[1] - CHEESE_W):  # iterate along image width
+            for col in range(
+                0, gray_diff.shape[1] - CHEESE_W
+            ):  # iterate along image width
                 cheese_box[0] = col
                 cheese_box[2] = col + CHEESE_W
 
@@ -651,6 +667,9 @@ class SandwichChecker:
                 int((best_cheese_box[0] + best_cheese_box[2]) / 2) + TRAY_BOX_PIX[0],
                 int((best_cheese_box[1] + best_cheese_box[3]) / 2) + TRAY_BOX_PIX[1],
             )
+
+        # Add cheese center to the list
+        self.cheese_centers.append(cheese_center)
 
         # Check if cheese is placed within threshold distance from bread
         valid_cheese = False
@@ -716,6 +735,9 @@ class SandwichChecker:
         )  # if no cheese is placed in tray or cheese is not close to bread
 
     def check_cheese_multi(self, image, ingredient_count):
+
+        # TODO: handle case when no cheese is detected in image
+
         # get images
         total_images = len(self.place_images)
         first_image = self.place_images[total_images - 2]
@@ -843,6 +865,9 @@ class SandwichChecker:
             int((multi_cheese_box[1] + multi_cheese_box[3]) / 2),
         )
 
+        # Add cheese center to the list
+        self.cheese_centers.append(multi_cheese_center)
+
         # Check if cheese is placed within threshold distance from bread
         valid_cheese = False
         distance = -1
@@ -922,86 +947,166 @@ class SandwichChecker:
         return valid_cheese, plot_image
 
     def check_ham(self, image):
-        # Extract previous and current place images
-        total_images = len(self.place_images)
-        first_image = self.place_images[total_images - 2]
-        second_image = self.place_images[total_images - 1]
 
-        # Crop the tray box from the bread image
-        first_image = first_image[
-            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
-        ]
+        if self.use_unet:
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        # Crop the tray box from the first ham image
-        second_image = second_image[
-            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
-        ]
+            assembly_mask = np.zeros_like(image_rgb)
+            assembly_mask = assembly_mask[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ] = 255
+            unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
 
-        # Segment bread from the second image using bread HSV values
-        second_hsv = cv2.cvtColor(second_image, cv2.COLOR_BGR2HSV)
-        bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND, dtype=np.uint8)
-        bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND, dtype=np.uint8)
-        bread_mask = cv2.inRange(
-            second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
-        )
+            # Get the ham mask using UNet
+            mask, max_contour_mask, max_contour_area = (
+                self.Bologna_UNet.get_top_layer_binary(
+                    Im.fromarray(unet_input_image), [61, 61, 245]
+                )
+            )
 
-        # Segment tray from the first image using tray HSV values
-        tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
-        tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
-        tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+            # if max_contour_area > 1.2 * self.ham_area_pixels:
+            #             self.get_logger().info(
+            #                 f"Ham area is too large: {max_contour_area} > {self.ham_area_pixels}, cropping out bottom 50% of bin and trying again..."
+            #             )
 
-        # Invert bread and tray masks for noise removal
-        bread_mask_inv = cv2.bitwise_not(bread_mask)
-        tray_mask_inv = cv2.bitwise_not(tray_mask)
+            #             # crop out bottom 25% of the bin
+            #             bin_mask = np.zeros_like(unet_input_image)
+            #             bin_mask[
+            #                 TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3] // 4, # crop out bottom 25%
+            #                 TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2],
+            #             ] = 255
+            #             unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
-        # Calculate difference image
-        diff = cv2.absdiff(first_image, second_image)
-        gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+            #             mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
+            #                 Im.fromarray(unet_input_image), [61, 61, 245]
+            #             )
 
-        # Denoise difference mask
-        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
-        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
-        gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
+            #             if max_contour_area > 1.5 * self.ham_area_pixels:
+            #                 self.get_logger().info(
+            #                     f"Ham area is still too large: {max_contour_area} > {self.ham_area_pixels}, skipping this image..."
+            #                 )
+            #                 raise Exception(
+            #                     f"Ham area after 75% crop is still too large: {max_contour_area} > {self.ham_area_pixels}"
+            #                 )
 
-        cv2.imwrite("diff.jpg", gray_diff)
+            mask = max_contour_mask
+            self.node_logger.info("Assembly ham mask area: {}".format(max_contour_area))
 
-        # Fit circle to the top bologna slice
-        circles = cv2.HoughCircles(
-            gray_diff,
-            cv2.HOUGH_GRADIENT,
-            dp=1,
-            minDist=50,
-            param1=50,
-            param2=15,
-            minRadius=45, #self.ham_radius * 0.90 
-            maxRadius=60, #self.ham_radius * 1.10
-        )
-        circles = np.uint16(np.around(circles))
-        circle_scores = []
-        for i in circles[0, :]:
-            circle_filter = np.zeros_like(gray_diff)
-            cv2.circle(circle_filter, (i[0], i[1]), i[2], (255, 255, 255), -1)
-            masked_img = cv2.bitwise_and(gray_diff, circle_filter)
-            score = np.sum(masked_img)
-            circle_scores.append(score)
-        max_index = np.argmax(circle_scores)
-        best_circle = circles[0, max_index]
-        best_circle_x, best_circle_y, best_circle_radius = (
-            int(best_circle[0]),
-            int(best_circle[1]),
-            int(best_circle[2]),
-        )
+            # save images for debugging
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_assembly_unet_input_image",
+                unet_input_image,
+            )
 
-        # Transform coordinates of circle to original image
-        best_circle_x += TRAY_BOX_PIX[0]
-        best_circle_y += TRAY_BOX_PIX[1]
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_assembly_unet_mask.jpg",
+                mask,
+            )
+
+            # check mask
+            mask_truth_value = np.max(mask)
+            if mask_truth_value == 0:
+                raise Exception(
+                    "UNet did not detect any ham in assembly area. Please check the image."
+                )
+            
+            # get center
+            y_coords, x_coords = np.where(mask == mask_truth_value)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
+            ham_center = (cam_x, cam_y)
+
+        else:
+            # Extract previous and current place images
+            total_images = len(self.place_images)
+            first_image = self.place_images[total_images - 2]
+            second_image = self.place_images[total_images - 1]
+
+            # Crop the tray box from the bread image
+            first_image = first_image[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ]
+
+            # Crop the tray box from the first ham image
+            second_image = second_image[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ]
+
+            # Segment bread from the second image using bread HSV values
+            second_hsv = cv2.cvtColor(second_image, cv2.COLOR_BGR2HSV)
+            bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND, dtype=np.uint8)
+            bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND, dtype=np.uint8)
+            bread_mask = cv2.inRange(
+                second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
+            )
+
+            # Segment tray from the first image using tray HSV values
+            tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
+            tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
+            tray_mask = cv2.inRange(
+                second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound
+            )
+
+            # Invert bread and tray masks for noise removal
+            bread_mask_inv = cv2.bitwise_not(bread_mask)
+            tray_mask_inv = cv2.bitwise_not(tray_mask)
+
+            # Calculate difference image
+            diff = cv2.absdiff(first_image, second_image)
+            gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+
+            # Denoise difference mask
+            gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
+            gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+            gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
+
+            cv2.imwrite("diff.jpg", gray_diff)
+
+            # Fit circle to the top bologna slice
+            circles = cv2.HoughCircles(
+                gray_diff,
+                cv2.HOUGH_GRADIENT,
+                dp=1,
+                minDist=50,
+                param1=50,
+                param2=15,
+                minRadius=45,  # self.ham_radius * 0.90
+                maxRadius=60,  # self.ham_radius * 1.10
+            )
+            circles = np.uint16(np.around(circles))
+            circle_scores = []
+            for i in circles[0, :]:
+                circle_filter = np.zeros_like(gray_diff)
+                cv2.circle(circle_filter, (i[0], i[1]), i[2], (255, 255, 255), -1)
+                masked_img = cv2.bitwise_and(gray_diff, circle_filter)
+                score = np.sum(masked_img)
+                circle_scores.append(score)
+            max_index = np.argmax(circle_scores)
+            best_circle = circles[0, max_index]
+            best_circle_x, best_circle_y, best_circle_radius = (
+                int(best_circle[0]),
+                int(best_circle[1]),
+                int(best_circle[2]),
+            )
+
+            # Transform coordinates of circle to original image
+            best_circle_x += TRAY_BOX_PIX[0]
+            best_circle_y += TRAY_BOX_PIX[1]
+
+            ham_center = (best_circle_x, best_circle_y)
+
+        # Add ham center to the list
+        self.ham_centers.append(ham_center)
 
         # Check if bologna is placed accurately
         bread_center_x, bread_center_y = self.bread_centers[0]
-        distance = (
-            (best_circle_x - bread_center_x) ** 2
-            + (best_circle_y - bread_center_y) ** 2
-        ) ** 0.5
+        # distance = (
+        #     (best_circle_x - bread_center_x) ** 2
+        #     + (best_circle_y - bread_center_y) ** 2
+        # ) ** 0.5
+        distance = (ham_center[0] - bread_center_x) ** 2 + (
+            ham_center[1] - bread_center_y
+        ) ** 2
         is_ham_correct = distance < self.pass_threshold
 
         # Plot results

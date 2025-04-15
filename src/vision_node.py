@@ -622,7 +622,7 @@ class VisionNode(Node):
                         
                     # save image for debugging
                     cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_input_image.jpg",
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_input_image.jpg",
                         cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
                     
@@ -635,11 +635,11 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_source_image.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_source_image.jpg",
                     image,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_mask.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_mask.jpg",
                     mask,
                 )
                 # cv2.imwrite(
@@ -650,15 +650,15 @@ class VisionNode(Node):
                 mask_truth_value = np.max(mask)
 
                 if mask_truth_value == 0:
-                    raise Exception("Cheese mask is empty")
+                    raise Exception("UNet did not detect any cheese in bin. Please check the image")
 
-                self.get_logger().info(f"Max value in mask {mask_truth_value}")
+                # self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == mask_truth_value)
                 cam_x = int(np.mean(x_coords))
                 cam_y = int(np.mean(y_coords))
 
-                self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
+                #self.get_logger().info(f"Cheese pickup point {cam_x}, {cam_y}")
                 cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
 
                 cv2.imwrite(
@@ -722,7 +722,7 @@ class VisionNode(Node):
                     
                     # save image for debugging
                     cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_input_image.jpg",
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_unet_input_image.jpg",
                         cv2.cvtColor(unet_input_image, cv2.COLOR_RGB2BGR),
                     )
                     
@@ -747,12 +747,12 @@ class VisionNode(Node):
 
                 # Save images for debugging
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_source_image.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_source_image.jpg",
                     image,
                 )
 
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_mask.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_unet_mask.jpg",
                     mask,
                 )
 
