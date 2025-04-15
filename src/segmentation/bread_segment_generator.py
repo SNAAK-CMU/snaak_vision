@@ -78,8 +78,8 @@ class BreadSegmentGenerator:
         crop = cv2.bitwise_and(blurred_image, crop_mask)
 
         contours, heirarchy = contour_segmentation(crop, binary_threshold=150, show_image=False, show_separate_contours=False, show_steps=False, close_kernel_size=7, open_kernel_size=7, segment_type='edges', edges_thresholds=(30, 50))
-        min_area = 6000
-        max_area = 17000
+        min_area = 6000 # replace with value from config variable
+        max_area = 17000 # replace with value from config variable
 
         contour_heap = [] # min heap
         for contour in contours:

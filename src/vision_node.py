@@ -75,12 +75,20 @@ HAM_BIN_XMAX = 450
 HAM_BIN_YMAX = 330
 
 # Cheese Dimensions in metres
-CHEESE_WIDTH = 0.090
-CHEESE_HEIGHT = 0.095
+CHEESE_WIDTH_MOZARELLA = 0.090
+CHEESE_HEIGHT_MOZARELLA = 0.095
+
+# Bread Dimensions in metres
+BREAD_WIDTH = 0.11
+BREAD_HEIGHT = 0.08
+
+# Tray Dimensions in metres
+TRAY_WIDTH = 0.305
+TRAY_HEIGHT = 0.220
 
 # Ham Dimensions in metres
 # 1098 pix/m ; ham_radius = 52 pix
-HAM_RADIUS = 0.05 # metres
+BOLOGNA_RADIUS = 0.05 # metres
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -103,10 +111,16 @@ class VisionNode(Node):
         # meters/pixel
         self.pixels_to_m = ((FOV_WIDTH / IMG_WIDTH) + (FOV_HEIGHT / IMG_HEIGHT)) / 2 # how many metres per pixel
         
+        # tray dimensions
+        self.tray_width = TRAY_WIDTH
+        self.tray_height = TRAY_HEIGHT
+        
         # ingredient dimensions
-        self.cheese_width = CHEESE_WIDTH
-        self.cheese_height = CHEESE_HEIGHT
-        self.ham_radius = HAM_RADIUS
+        self.bread_width = BREAD_WIDTH
+        self.bread_height = BREAD_HEIGHT
+        self.cheese_width = CHEESE_WIDTH_MOZARELLA
+        self.cheese_height = CHEESE_HEIGHT_MOZARELLA
+        self.ham_radius = BOLOGNA_RADIUS
         self.cheese_area_pixels = self.cheese_width * self.cheese_height * (1 / self.pixels_to_m**2)
         self.ham_area_pixels = np.pi * (self.ham_radius**2) * (1 / self.pixels_to_m**2)
 
@@ -152,6 +166,9 @@ class VisionNode(Node):
             image_height=self.image_height,
             node_logger=self.get_logger(),
             cheese_dims_m=[self.cheese_width, self.cheese_height],
+            tray_dims_m=[self.tray_width, self.tray_height],
+            bread_dims_m=[self.bread_width, self.bread_height],
+            ham_radius_m=self.ham_radius,
         )
 
         # init control variables
