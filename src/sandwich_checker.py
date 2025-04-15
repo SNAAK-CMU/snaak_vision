@@ -56,7 +56,7 @@ class SandwichChecker:
         tray_center=None,
         cheese_UNet=None,
         bologna_UNet=None,
-        use_unet=False
+        use_unet=False,
         ham_radius=0.05,
     ):
 
