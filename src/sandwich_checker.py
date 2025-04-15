@@ -71,7 +71,7 @@ class SandwichChecker:
         self.pix_per_m = (
             (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
         ) / 2
-       
+
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
 
@@ -246,8 +246,15 @@ class SandwichChecker:
             # cv2.destroyAllWindows()
 
         # Use SAM2 to localize bread
-        input_points = np.array([[cX, cY]], dtype=np.float32)
-        input_labels = np.array([1], dtype=np.int32)
+        input_points = [[cX, cY]]
+
+        # Add two more points for prompting SAM
+        input_points.append([cX, cY + 12])
+        input_points.append([cX, cY - 12])
+
+        input_points = np.array(input_points, dtype=np.float32)
+        input_labels = np.array([1, 1, 1], dtype=np.int32)
+
         self.predictor.set_image(second_crop)
         masks, scores, logits = self.predictor.predict(
             point_coords=input_points,
