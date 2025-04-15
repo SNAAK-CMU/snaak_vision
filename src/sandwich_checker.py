@@ -495,7 +495,7 @@ class SandwichChecker:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             assembly_mask = np.zeros_like(image_rgb)
-            assembly_mask = assembly_mask[
+            assembly_mask[
                 TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
             ] = 255
             unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
@@ -952,7 +952,7 @@ class SandwichChecker:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             assembly_mask = np.zeros_like(image_rgb)
-            assembly_mask = assembly_mask[
+            assembly_mask[
                 TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
             ] = 255
             unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
