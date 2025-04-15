@@ -152,7 +152,6 @@ class VisionNode(Node):
             image_height=self.image_height,
             node_logger=self.get_logger(),
             cheese_dims_m=[self.cheese_width, self.cheese_height],
-            pixel_to_m=self.pixels_to_m,
         )
 
         # init control variables
@@ -574,15 +573,15 @@ class VisionNode(Node):
                         Im.fromarray(unet_input_image), [250, 250, 55]
                     )
                     
-                    if max_contour_area > 1.5 * self.cheese_area_pixels:
+                    if max_contour_area > 1.2 * self.cheese_area_pixels:
                         self.get_logger().info(
-                            f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 25% of bin and trying again..."
+                            f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
                         
-                        # crop out bottom 33% of the bin 
+                        # crop out bottom 50% of the bin 
                         bin_mask = np.zeros_like(unet_input_image)
                         bin_mask[
-                            CHEESE_BIN_YMIN : CHEESE_BIN_YMAX - (CHEESE_BIN_YMAX - CHEESE_BIN_YMIN) // 3,
+                            CHEESE_BIN_YMIN : CHEESE_BIN_YMAX - (CHEESE_BIN_YMAX - CHEESE_BIN_YMIN) // 2,
                             CHEESE_BIN_XMIN : CHEESE_BIN_XMAX,
                         ] = 255
                         unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
@@ -675,15 +674,15 @@ class VisionNode(Node):
                         Im.fromarray(unet_input_image), [61, 61, 245]
                     )
                     
-                    if max_contour_area > 1.5 * self.ham_area_pixels:
+                    if max_contour_area > 1.2 * self.ham_area_pixels:
                         self.get_logger().info(
-                            f"Ham area is too large: {max_contour_area} > {self.ham_area_pixels}, cropping out bottom 25% of bin and trying again..."
+                            f"Ham area is too large: {max_contour_area} > {self.ham_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
                         
                         # crop out bottom 25% of the bin 
                         bin_mask = np.zeros_like(unet_input_image)
                         bin_mask[
-                            HAM_BIN_YMIN : HAM_BIN_YMAX - (HAM_BIN_YMAX - HAM_BIN_YMIN) // 4,
+                            HAM_BIN_YMIN : HAM_BIN_YMAX - (HAM_BIN_YMAX - HAM_BIN_YMIN) // 2,
                             HAM_BIN_XMIN : HAM_BIN_XMAX,
                         ] = 255
                         unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
