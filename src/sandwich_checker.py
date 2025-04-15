@@ -58,7 +58,7 @@ class SandwichChecker:
         cheese_UNet=None,
         bologna_UNet=None,
         use_unet=False,
-        ham_radius=0.05,
+        ham_radius_m=0.05,
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -80,7 +80,7 @@ class SandwichChecker:
 
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
-        self.ham_radius_pix = ham_radius * self.pix_per_m
+        self.ham_radius_pix = ham_radius_m * self.pix_per_m
 
         # Initialize localization lists
         self.tray_contours = []
