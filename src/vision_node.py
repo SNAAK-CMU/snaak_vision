@@ -590,12 +590,12 @@ class VisionNode(Node):
                         Im.fromarray(unet_input_image), [250, 250, 55]
                         )
                         
-                        if max_contour_area > 1.5 * self.cheese_area_pixels:
+                        if max_contour_area > 1.2 * self.cheese_area_pixels:
                             self.get_logger().info(
                                 f"Cheese area is still too large: {max_contour_area} > {self.cheese_area_pixels}, skipping this image..."
                             )
                             raise Exception(
-                                f"Cheese area after 66% crop is still too large: {max_contour_area} > {self.cheese_area_pixels}"
+                                f"Cheese area after 50% crop is still too large: {max_contour_area} > {self.cheese_area_pixels}"
                             )
                         
                         
