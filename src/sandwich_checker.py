@@ -29,7 +29,7 @@ TRAY_BOX_PIX = (
     300,
 )  # (x1, y1, x2, y2) coordinates of the tray box in the image
 
-CHEESE_W = 97  # width of the cheese slice in pixels
+CHEESE_W = 103  # width of the cheese slice in pixels
 
 SAM2_CHECKPOINT = (
     "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
@@ -57,6 +57,7 @@ class SandwichChecker:
         cheese_UNet=None,
         bologna_UNet=None,
         use_unet=False
+        ham_radius=0.05,
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -78,6 +79,7 @@ class SandwichChecker:
        
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
+        self.ham_radius_pix = ham_radius * self.pix_per_m
 
         # Initialize localization lists
         self.tray_contours = []
@@ -255,8 +257,15 @@ class SandwichChecker:
             # cv2.destroyAllWindows()
 
         # Use SAM2 to localize bread
-        input_points = np.array([[cX, cY]], dtype=np.float32)
-        input_labels = np.array([1], dtype=np.int32)
+        input_points = [[cX, cY]]
+
+        # Add two more points for prompting SAM
+        input_points.append([cX, cY + 15])
+        input_points.append([cX, cY - 15])
+
+        input_points = np.array(input_points, dtype=np.float32)
+        input_labels = np.array([1, 1, 1], dtype=np.int32)
+
         self.predictor.set_image(second_crop)
         masks, scores, logits = self.predictor.predict(
             point_coords=input_points,
@@ -964,8 +973,8 @@ class SandwichChecker:
             minDist=50,
             param1=50,
             param2=15,
-            minRadius=45,
-            maxRadius=60,
+            minRadius=45, #self.ham_radius * 0.90 
+            maxRadius=60, #self.ham_radius * 1.10
         )
         circles = np.uint16(np.around(circles))
         circle_scores = []
