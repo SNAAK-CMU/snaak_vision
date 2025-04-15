@@ -40,6 +40,7 @@ SAM2_MODEL_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 
 
 class SandwichChecker:
+    # this class checks everything in pixel coords
     def __init__(
         self,
         fov_width=0.775,
@@ -50,7 +51,6 @@ class SandwichChecker:
         tray_dims_m=[0.305, 0.220],
         bread_dims_m=[0.11, 0.08],
         cheese_dims_m=[0.090, 0.095],
-        pixels_per_m=1098.0,
         node_logger=None,
         tray_center=None,
     ):

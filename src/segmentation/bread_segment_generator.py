@@ -84,7 +84,7 @@ class BreadSegmentGenerator:
         contour_heap = [] # min heap
         for contour in contours:
             contour_area = cv2.contourArea(contour)
-            print(f"Contour area: {contour_area}")
+            #print(f"Contour area: {contour_area}")
             if min_area <= contour_area <= max_area:
                 heapq.heappush(contour_heap, (contour_area, contour))
 

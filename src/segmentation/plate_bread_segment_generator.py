@@ -75,7 +75,7 @@ class PlateBreadSegementGenerator():
                 cY = int(top_y + (bottom_y - top_y) / 2)
 
                 if top_y  == -1: 
-                    cY - (bottom_y - cY) / 2
+                    cY = (bottom_y - cY) / 2
 
                 return cX, cY, bottom_y
         raise Exception("No suitable bread pickup point found")
