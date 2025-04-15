@@ -50,7 +50,6 @@ class SandwichChecker:
         tray_dims_m=[0.305, 0.220],
         bread_dims_m=[0.11, 0.08],
         cheese_dims_m=[0.090, 0.095],
-        pixels_per_m=1098.0,
         node_logger=None,
         tray_center=None,
     ):
@@ -68,9 +67,10 @@ class SandwichChecker:
         self.image_width = image_width
         self.tray_center = tray_center
 
-        self.pix_per_m = (
-            (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
-        ) / 2
+        # self.pix_per_m = (
+        #     (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
+        # ) / 2
+        self.pix_per_m = pixel_to_m
        
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
