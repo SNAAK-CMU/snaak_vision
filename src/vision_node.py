@@ -45,7 +45,7 @@ from sandwich_checker import SandwichChecker
 ############### Parameters #################
 
 USE_UNET = True  # Set to True to use UNet, False to use SAM
-USE_UNET_FOR_CHECK = False
+USE_UNET_FOR_CHECK = True
 
 # Make these config
 HAM_BIN_ID = 1
