@@ -490,6 +490,8 @@ class SandwichChecker:
 
         # TODO: handle case when no cheese is detected in image
 
+        best_cheese_box = None
+
         if self.use_unet:
             # convert image to RGB
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -640,7 +642,6 @@ class SandwichChecker:
             ]  # (x1, y1, x2, y2) coordinates of the cheese box in the image
 
             max_sum = 0
-            best_cheese_box = None
 
             # Slide the cheese box over the image
             for col in range(
@@ -695,17 +696,20 @@ class SandwichChecker:
         # Visualize cheese localization
         plot_image = image.copy()
         cv2.circle(plot_image, cheese_center, 5, (255, 0, 255), -1)
-        cv2.rectangle(
-            plot_image,
-            (best_cheese_box[0], best_cheese_box[1]),
-            (best_cheese_box[2], best_cheese_box[3]),
-            (255, 0, 255),
-            2,
-        )
+
+        if best_cheese_box is not None:
+            # don't draw box if using UNet
+            cv2.rectangle(
+                plot_image,
+                (best_cheese_box[0], best_cheese_box[1]),
+                (best_cheese_box[2], best_cheese_box[3]),
+                (255, 0, 255),
+                2,
+            )
 
         # Visualize bread localization
-        for contour in self.bread_contours:
-            cv2.drawContours(plot_image, contour, -1, (255, 0, 0), 3)
+        # for contour in self.bread_contours:
+        #     cv2.drawContours(plot_image, contour, -1, (255, 0, 0), 3)
         for center in self.bread_centers:
             cv2.circle(plot_image, center, 5, (0, 0, 255), -1)
 
@@ -1015,6 +1019,7 @@ class SandwichChecker:
             cam_x = int(np.mean(x_coords))
             cam_y = int(np.mean(y_coords))
             ham_center = (cam_x, cam_y)
+            best_circle_radius = None
 
         else:
             # Extract previous and current place images
@@ -1111,15 +1116,18 @@ class SandwichChecker:
 
         # Plot results
         best_circle_img = self.place_images[-1].copy()
-        cv2.circle(
-            best_circle_img,
-            (best_circle_x, best_circle_y),
-            best_circle_radius,
-            (0, 255, 0),
-            2,
-        )
 
-        cv2.circle(best_circle_img, (best_circle_x, best_circle_y), 5, (0, 255, 0), 3)
+        if best_circle_radius is not None:
+            # dont draw circle when using unet
+            cv2.circle(
+                best_circle_img,
+                (ham_center[0], ham_center[1]),
+                best_circle_radius,
+                (0, 255, 0),
+                2,
+            )
+
+        cv2.circle(best_circle_img, (ham_center[0], ham_center[1]), 5, (0, 255, 0), 3)
         for center in self.bread_centers:
             cv2.circle(best_circle_img, center, 5, (0, 0, 255), -1)
 
