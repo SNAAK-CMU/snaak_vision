@@ -153,7 +153,7 @@ class VisionNode(Node):
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
-            model_path="logs/ham/multiingredient_bologna/best_epoch_weights.pth",
+            model_path="logs/ham/bologna_check/best_epoch_weights.pth",
             mix_type=1,
             num_classes=5,
         )
