@@ -8,6 +8,7 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 import segmentation.segment_utils as seg_utils
 from segmentation.segment_utils import segment_from_hsv, convert_mask_to_orig_dims
+from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 
 
 ########## Parameters ##########
@@ -53,6 +54,9 @@ class SandwichChecker:
         cheese_dims_m=[0.090, 0.095],
         node_logger=None,
         tray_center=None,
+        cheese_UNet=None,
+        bologna_UNet=None,
+        use_unet=False
     ):
 
         self.tray_hsv_lower_bound = TRAY_HSV_LOWER_BOUND
@@ -89,6 +93,11 @@ class SandwichChecker:
         self.sam2_checkpoint = SAM2_CHECKPOINT
         self.model_cfg = SAM2_MODEL_CFG
         self.__create_sam_predictor()
+
+        # Initialize UNet
+        self.cheese_UNet = cheese_UNet
+        self.bologna_UNet = bologna_UNet
+        self.use_unet = use_unet
 
         self.node_logger = node_logger
         if self.node_logger is not None:
@@ -533,101 +542,106 @@ class SandwichChecker:
 
         # TODO: handle case when no cheese is detected in image
 
-        # get images
-        total_images = len(self.place_images)
-        first_image = self.place_images[total_images - 2]
-        second_image = self.place_images[total_images - 1]
+        if self.use_unet:
+            pass
+            cheese_center = (0,0)
+        else:
 
-        # Crop the tray box from the bread image
-        first_crop = first_image[
-            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
-        ]
+            # get images
+            total_images = len(self.place_images)
+            first_image = self.place_images[total_images - 2]
+            second_image = self.place_images[total_images - 1]
 
-        # Crop the tray box from the first ham image
-        second_crop = second_image[
-            TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
-        ]
+            # Crop the tray box from the bread image
+            first_crop = first_image[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ]
 
-        # Segment tray from the second image using tray HSV values
-        # Convert the image to HSV color space
-        second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
-        tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
-        tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
-        tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
+            # Crop the tray box from the first ham image
+            second_crop = second_image[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ]
 
-        # Invert the tray mask
-        tray_mask_inv = cv2.bitwise_not(tray_mask)
+            # Segment tray from the second image using tray HSV values
+            # Convert the image to HSV color space
+            second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
+            tray_hsv_lower_bound = np.array(TRAY_HSV_LOWER_BOUND, dtype=np.uint8)
+            tray_hsv_upper_bound = np.array(TRAY_HSV_UPPER_BOUND, dtype=np.uint8)
+            tray_mask = cv2.inRange(second_hsv, tray_hsv_lower_bound, tray_hsv_upper_bound)
 
-        # Find the bounding box of the tray
-        contours, _ = cv2.findContours(
-            tray_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            tray_x, tray_y, tray_w, tray_h = cv2.boundingRect(largest_contour)
+            # Invert the tray mask
+            tray_mask_inv = cv2.bitwise_not(tray_mask)
 
-        # Black out everything outside the tray box coordinate in tray_mask_inv
-        tray_mask_inv[0 : tray_y + 5, :] = 0
-        tray_mask_inv[tray_y + tray_h - 5 :, :] = 0
-        tray_mask_inv[:, 0 : tray_x + 5] = 0
-        tray_mask_inv[:, tray_x + tray_w - 5 :] = 0
+            # Find the bounding box of the tray
+            contours, _ = cv2.findContours(
+                tray_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+            if contours:
+                largest_contour = max(contours, key=cv2.contourArea)
+                tray_x, tray_y, tray_w, tray_h = cv2.boundingRect(largest_contour)
 
-        # cv2.imshow("tray_mask_inv", tray_mask_inv)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+            # Black out everything outside the tray box coordinate in tray_mask_inv
+            tray_mask_inv[0 : tray_y + 5, :] = 0
+            tray_mask_inv[tray_y + tray_h - 5 :, :] = 0
+            tray_mask_inv[:, 0 : tray_x + 5] = 0
+            tray_mask_inv[:, tray_x + tray_w - 5 :] = 0
 
-        # Segment bread using strict hsv bounds (to differentiate between bread and cheese)
-        second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
-        bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8)
-        bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8)
-        bread_mask = cv2.inRange(
-            second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
-        )
-        bread_mask_inv = cv2.bitwise_not(bread_mask)
+            # cv2.imshow("tray_mask_inv", tray_mask_inv)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
 
-        # Calculate the difference between the two images
-        diff = cv2.absdiff(first_crop, second_crop)
-        gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+            # Segment bread using strict hsv bounds (to differentiate between bread and cheese)
+            second_hsv = cv2.cvtColor(second_crop, cv2.COLOR_BGR2HSV)
+            bread_hsv_lower_bound = np.array(BREAD_HSV_LOWER_BOUND_STRICT, dtype=np.uint8)
+            bread_hsv_upper_bound = np.array(BREAD_HSV_UPPER_BOUND_STRICT, dtype=np.uint8)
+            bread_mask = cv2.inRange(
+                second_hsv, bread_hsv_lower_bound, bread_hsv_upper_bound
+            )
+            bread_mask_inv = cv2.bitwise_not(bread_mask)
 
-        # And operate the difference image with bread mask and tray mask
-        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
-        gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
-        gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
+            # Calculate the difference between the two images
+            diff = cv2.absdiff(first_crop, second_crop)
+            gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
-        # Sliding window to find cheese bounding box
-        cheese_box = [
-            0,
-            0,
-            CHEESE_W,
-            CHEESE_W,
-        ]  # (x1, y1, x2, y2) coordinates of the cheese box in the image
+            # And operate the difference image with bread mask and tray mask
+            gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+            gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
+            gray_diff = cv2.GaussianBlur(gray_diff, (7, 7), 0)
 
-        max_sum = 0
-        best_cheese_box = None
+            # Sliding window to find cheese bounding box
+            cheese_box = [
+                0,
+                0,
+                CHEESE_W,
+                CHEESE_W,
+            ]  # (x1, y1, x2, y2) coordinates of the cheese box in the image
 
-        # Slide the cheese box over the image
-        for col in range(0, gray_diff.shape[1] - CHEESE_W):  # iterate along image width
-            cheese_box[0] = col
-            cheese_box[2] = col + CHEESE_W
+            max_sum = 0
+            best_cheese_box = None
 
-            for row in range(
-                0, gray_diff.shape[0] - CHEESE_W
-            ):  # iterate along image height
-                cheese_box[1] = row
-                cheese_box[3] = row + CHEESE_W
+            # Slide the cheese box over the image
+            for col in range(0, gray_diff.shape[1] - CHEESE_W):  # iterate along image width
+                cheese_box[0] = col
+                cheese_box[2] = col + CHEESE_W
 
-                cheese_crop = gray_diff[
-                    cheese_box[1] : cheese_box[3], cheese_box[0] : cheese_box[2]
-                ]
-                cheese_crop_sum = np.sum(cheese_crop)
-                if cheese_crop_sum > max_sum:
-                    max_sum = cheese_crop_sum
-                    best_cheese_box = cheese_box.copy()
+                for row in range(
+                    0, gray_diff.shape[0] - CHEESE_W
+                ):  # iterate along image height
+                    cheese_box[1] = row
+                    cheese_box[3] = row + CHEESE_W
 
-        cheese_center = (
-            int((best_cheese_box[0] + best_cheese_box[2]) / 2) + TRAY_BOX_PIX[0],
-            int((best_cheese_box[1] + best_cheese_box[3]) / 2) + TRAY_BOX_PIX[1],
-        )
+                    cheese_crop = gray_diff[
+                        cheese_box[1] : cheese_box[3], cheese_box[0] : cheese_box[2]
+                    ]
+                    cheese_crop_sum = np.sum(cheese_crop)
+                    if cheese_crop_sum > max_sum:
+                        max_sum = cheese_crop_sum
+                        best_cheese_box = cheese_box.copy()
+
+            cheese_center = (
+                int((best_cheese_box[0] + best_cheese_box[2]) / 2) + TRAY_BOX_PIX[0],
+                int((best_cheese_box[1] + best_cheese_box[3]) / 2) + TRAY_BOX_PIX[1],
+            )
 
         # Check if cheese is placed within threshold distance from bread
         valid_cheese = False

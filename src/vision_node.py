@@ -45,6 +45,7 @@ from sandwich_checker import SandwichChecker
 ############### Parameters #################
 
 USE_UNET = True  # Set to True to use UNet, False to use SAM
+USE_UNET_FOR_CHECK = False
 
 # Make these config
 HAM_BIN_ID = 1
@@ -152,6 +153,9 @@ class VisionNode(Node):
             image_height=self.image_height,
             node_logger=self.get_logger(),
             cheese_dims_m=[self.cheese_width, self.cheese_height],
+            cheese_UNet = self.Cheese_UNet,
+            bologna_UNet = self.Bologna_UNet,
+            use_unet = USE_UNET_FOR_CHECK,
         )
 
         # init control variables
