@@ -131,7 +131,7 @@ class VisionNode(Node):
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
-            model_path="logs/cheese/best_epoch_weights.pth",  # choose weights
+            model_path="logs/cheese/cheese_check/best_epoch_weights.pth",  # choose weights
             mix_type=1,
             num_classes=3,
         )
