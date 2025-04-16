@@ -30,7 +30,7 @@ TRAY_BOX_PIX = (
     300,
 )  # (x1, y1, x2, y2) coordinates of the tray box in the image
 
-CHEESE_W = 103  # width of the cheese slice in pixels
+CHEESE_W = 95  # width of the cheese slice in pixels
 
 SAM2_CHECKPOINT = (
     "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
@@ -74,9 +74,11 @@ class SandwichChecker:
         self.image_width = image_width
         self.tray_center = tray_center
 
-        self.pix_per_m = (
-            (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
-        ) / 2
+        # self.pix_per_m = (
+        #     (self.image_width / self.fov_width) + (self.image_height / self.fov_height)
+        # ) / 2
+
+        self.pix_per_m = 1280
 
         self.pass_threshold = self.pix_per_m * (self.threshold_in_cm / 100)
         self.__calc_area_thresholds(tray_dims_m, bread_dims_m, cheese_dims_m)
@@ -324,7 +326,7 @@ class SandwichChecker:
         plot_image = image.copy()
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
-            cv2.drawContours(plot_image, [largest_contour], -1, (0, 255, 0), 3)
+            # cv2.drawContours(plot_image, [largest_contour], -1, (0, 255, 0), 3)
 
             # Find the center of the convex hull
             M = cv2.moments(largest_contour)
@@ -408,6 +410,18 @@ class SandwichChecker:
             2,
         )
 
+        result_string = "PASS" if bread_on_tray else "FAIL"
+        result_color = (0, 255, 0) if bread_on_tray else (0, 0, 255)
+        cv2.putText(
+            plot_image,
+            result_string,
+            (plot_image.shape[1] - 100, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            result_color,
+            2,
+        )
+
         return bread_on_tray, plot_image
 
     def check_bread_top(self, image):
@@ -457,6 +471,18 @@ class SandwichChecker:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
+            2,
+        )
+
+        result_string = "PASS" if bread_on_tray else "FAIL"
+        result_color = (0, 255, 0) if bread_on_tray else (0, 0, 255)
+        cv2.putText(
+            plot_image,
+            result_string,
+            (plot_image.shape[1] - 100, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            result_color,
             2,
         )
 
@@ -697,7 +723,7 @@ class SandwichChecker:
 
         # Visualize cheese localization
         plot_image = image.copy()
-        cv2.circle(plot_image, cheese_center, 5, (255, 0, 255), -1)
+        cv2.circle(plot_image, cheese_center, 5, (0, 255, 0), -1)
 
         if best_cheese_box is not None:
             # don't draw box if using UNet
@@ -732,6 +758,18 @@ class SandwichChecker:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
+            2,
+        )
+
+        result_string = "PASS" if valid_cheese else "FAIL"
+        result_color = (0, 255, 0) if valid_cheese else (0, 0, 255)
+        cv2.putText(
+            plot_image,
+            result_string,
+            (plot_image.shape[1] - 100, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            result_color,
             2,
         )
 
@@ -800,10 +838,28 @@ class SandwichChecker:
         diff = cv2.absdiff(first_crop, second_crop)
         gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n4.jpg",
+        #     gray_diff,
+        # )
+
         # And operate the difference image with bread mask and tray mask
         gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=tray_mask_inv)
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n4_1.jpg",
+        #     gray_diff,
+        # )
         gray_diff = cv2.bitwise_and(gray_diff, gray_diff, mask=bread_mask_inv)
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n4_2.jpg",
+        #     gray_diff,
+        # )
         gray_diff = cv2.GaussianBlur(gray_diff, (9, 9), 0)
+
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n3.jpg",
+        #     gray_diff,
+        # )
 
         # Initialize window as per cheese count
         search_cheese_w = int(CHEESE_W + 0.4 * CHEESE_W * (ingredient_count - 1))
@@ -836,6 +892,11 @@ class SandwichChecker:
                 if cheese_crop_sum > max_sum:
                     max_sum = cheese_crop_sum
                     best_cheese_box = cheese_box.copy()
+        
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n2.jpg",
+        #     gray_diff,
+        # )
 
         # Blacken out everything outside the cheese box
         gray_diff_new = np.zeros_like(gray_diff)
@@ -848,7 +909,10 @@ class SandwichChecker:
         ]
         gray_diff = gray_diff_new
 
-        cv2.imwrite("multi_cheese_gray_diff.jpg", gray_diff)
+        # cv2.imwrite(
+        #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_final.jpg",
+        #     gray_diff,
+        # )
 
         # Apply edge detection to the difference image
         edges = cv2.Canny(gray_diff, 20, 30)
@@ -895,13 +959,13 @@ class SandwichChecker:
         # Visualize cheese localization
         plot_image = image.copy()
         cv2.circle(plot_image, multi_cheese_center, 5, (255, 0, 255), -1)
-        cv2.rectangle(
-            plot_image,
-            (multi_cheese_box[0], multi_cheese_box[1]),
-            (multi_cheese_box[2], multi_cheese_box[3]),
-            (255, 0, 255),
-            2,
-        )
+        # cv2.rectangle(
+        #     plot_image,
+        #     (multi_cheese_box[0], multi_cheese_box[1]),
+        #     (multi_cheese_box[2], multi_cheese_box[3]),
+        #     (255, 0, 255),
+        #     2,
+        # )
 
         # Visualize bread localization
         for contour in self.bread_contours:
@@ -926,6 +990,19 @@ class SandwichChecker:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
+            2,
+        )
+
+        # Write pass or fail depending on valid cheese on the top right corner
+        result_string = "PASS" if valid_cheese else "FAIL"
+        result_color = (0, 255, 0) if valid_cheese else (0, 0, 255)
+        cv2.putText(
+            plot_image,
+            result_string,
+            (plot_image.shape[1] - 100, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            result_color,
             2,
         )
 
@@ -1136,7 +1213,7 @@ class SandwichChecker:
                 2,
             )
 
-        cv2.circle(best_circle_img, (ham_center[0], ham_center[1]), 5, (0, 255, 0), 3)
+        cv2.circle(best_circle_img, (ham_center[0], ham_center[1]), 3, (0, 255, 0), 3)
         for center in self.bread_centers:
             cv2.circle(best_circle_img, center, 5, (0, 0, 255), -1)
 
@@ -1157,6 +1234,18 @@ class SandwichChecker:
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
+            2,
+        )
+
+        result_string = "PASS" if is_ham_correct else "FAIL"
+        result_color = (0, 255, 0) if is_ham_correct else (0, 0, 255)
+        cv2.putText(
+            best_circle_img,
+            result_string,
+            (best_circle_img.shape[1] - 100, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            result_color,
             2,
         )
 
