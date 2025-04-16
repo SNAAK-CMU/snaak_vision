@@ -159,6 +159,7 @@ class VisionNode(Node):
         )
 
         # init sandwich checker
+        self.use_UNet_for_check = USE_UNET_FOR_CHECK
         self.sandwich_checker = SandwichChecker(
             fov_height=self.fov_h,
             fov_width=self.fov_w,
@@ -172,7 +173,7 @@ class VisionNode(Node):
             ham_radius_m=self.ham_radius,
             cheese_UNet = self.Cheese_UNet,
             bologna_UNet = self.Bologna_UNet,
-            use_unet = USE_UNET_FOR_CHECK,
+            use_unet = self.use_UNet_for_check,
         )
 
         # init control variables
@@ -387,7 +388,7 @@ class VisionNode(Node):
             )
             response.is_placed = ingredient_check
             response.is_error = False
-            # TODO: do something with check_image
+
             # save check_image for debugging
             cv2.imwrite(
                 f"/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/{ingredient_name}_check_image.jpg",

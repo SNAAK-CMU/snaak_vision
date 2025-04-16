@@ -504,7 +504,7 @@ class SandwichChecker:
 
             # Get the cheese mask using UNet
             mask, max_contour_mask, max_contour_area = (
-                self.Cheese_UNet.get_top_layer_binary(
+                self.cheese_UNet.get_top_layer_binary(
                     Im.fromarray(unet_input_image), [250, 250, 55]
                 )
             )
@@ -537,12 +537,14 @@ class SandwichChecker:
             # choose the largest contour
             mask = max_contour_mask
             self.node_logger.info(
-                "Assembly cheese mask area: {}".format(max_contour_area)
+                "Used UNet to get assembly cheese mask of area: {}".format(
+                    max_contour_area
+                )
             )
 
             # save images for debugging
             cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_input_image",
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_input_image.jpg",
                 unet_input_image,
             )
 
@@ -669,6 +671,12 @@ class SandwichChecker:
                 int((best_cheese_box[1] + best_cheese_box[3]) / 2) + TRAY_BOX_PIX[1],
             )
 
+            # Convert cheese box to orig image coordinates
+            best_cheese_box[0] += TRAY_BOX_PIX[0]
+            best_cheese_box[1] += TRAY_BOX_PIX[1]
+            best_cheese_box[2] += TRAY_BOX_PIX[0]
+            best_cheese_box[3] += TRAY_BOX_PIX[1]
+
         # Add cheese center to the list
         self.cheese_centers.append(cheese_center)
 
@@ -686,12 +694,6 @@ class SandwichChecker:
             if distance < self.pass_threshold:
                 valid_cheese = True
                 break
-
-        # Convert cheese box to orig image coordinates
-        best_cheese_box[0] += TRAY_BOX_PIX[0]
-        best_cheese_box[1] += TRAY_BOX_PIX[1]
-        best_cheese_box[2] += TRAY_BOX_PIX[0]
-        best_cheese_box[3] += TRAY_BOX_PIX[1]
 
         # Visualize cheese localization
         plot_image = image.copy()
@@ -846,6 +848,8 @@ class SandwichChecker:
         ]
         gray_diff = gray_diff_new
 
+        cv2.imwrite("multi_cheese_gray_diff.jpg", gray_diff)
+
         # Apply edge detection to the difference image
         edges = cv2.Canny(gray_diff, 20, 30)
 
@@ -963,7 +967,7 @@ class SandwichChecker:
 
             # Get the ham mask using UNet
             mask, max_contour_mask, max_contour_area = (
-                self.Bologna_UNet.get_top_layer_binary(
+                self.bologna_UNet.get_top_layer_binary(
                     Im.fromarray(unet_input_image), [61, 61, 245]
                 )
             )
@@ -994,11 +998,15 @@ class SandwichChecker:
             #                 )
 
             mask = max_contour_mask
-            self.node_logger.info("Assembly ham mask area: {}".format(max_contour_area))
+            self.node_logger.info(
+                "Used UNet to get assembly bologna mask of area: {}".format(
+                    max_contour_area
+                )
+            )
 
             # save images for debugging
             cv2.imwrite(
-                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_assembly_unet_input_image",
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_assembly_unet_input_image.jpg",
                 unet_input_image,
             )
 
@@ -1013,7 +1021,7 @@ class SandwichChecker:
                 raise Exception(
                     "UNet did not detect any ham in assembly area. Please check the image."
                 )
-            
+
             # get center
             y_coords, x_coords = np.where(mask == mask_truth_value)
             cam_x = int(np.mean(x_coords))
@@ -1109,9 +1117,10 @@ class SandwichChecker:
         #     (best_circle_x - bread_center_x) ** 2
         #     + (best_circle_y - bread_center_y) ** 2
         # ) ** 0.5
-        distance = (ham_center[0] - bread_center_x) ** 2 + (
-            ham_center[1] - bread_center_y
-        ) ** 2
+        distance = (
+            (ham_center[0] - bread_center_x) ** 2
+            + (ham_center[1] - bread_center_y) ** 2
+        ) ** 0.5
         is_ham_correct = distance < self.pass_threshold
 
         # Plot results
