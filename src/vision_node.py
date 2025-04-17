@@ -744,8 +744,7 @@ class VisionNode(Node):
                     raise Exception("No segmentation method chosen")
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-
+                
                 # Save images for debugging
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_source_image.jpg",
@@ -757,6 +756,7 @@ class VisionNode(Node):
                     mask,
                 )
 
+                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_point.jpg",
                     image,
@@ -805,7 +805,7 @@ class VisionNode(Node):
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.008  # TODO: tune these
+            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.007  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
@@ -941,10 +941,6 @@ class VisionNode(Node):
             # transform coordinates
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
-            # verify depth
-            if not cam_z > 0.25 and cam_z < 0.35:
-                raise Exception("Incorrect Depth Value")
-
             self.get_logger().info("got transform, applying it to point...")
 
             response.x = response_transformed[0]
@@ -954,6 +950,9 @@ class VisionNode(Node):
             self.get_logger().info(
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
+
+            if not (response.z > 0.28 and response.z < 0.35):
+                raise Exception("Invalid Depth")
 
             # publish point to topic
             self.marker.pose.position = Point(x=response.x, y=response.y, z=response.z)
