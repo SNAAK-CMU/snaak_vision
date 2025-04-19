@@ -1,0 +1,5 @@
+string ingredient_name
+int32 ingredient_count
+---
+bool is_placed
+bool is_error

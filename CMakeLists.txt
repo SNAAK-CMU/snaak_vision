@@ -13,6 +13,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetDepthAtPoint.srv"
   "srv/GetXYZFromImage.srv"
+  "srv/CheckIngredientPlace.srv"
   DEPENDENCIES std_msgs sensor_msgs
 )
 

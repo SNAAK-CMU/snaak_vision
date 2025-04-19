@@ -74,36 +74,40 @@ class TestCalibration(Node):
         
         image = self.rgb_image
         image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
-
         height, width = image.shape[:2]
+
         crop_height = 50
-        crop_width = 70
-        crop_y_start = (height - crop_height) // 2
+        crop_width = 50
+        vertical_offset = 40  # Shift down by 20 pixels
+        horizontal_offset = 30  # Shift right by 30 pixels
+
+        crop_y_start = (height - crop_height) // 2 + vertical_offset
         crop_y_end = crop_y_start + crop_height
-        crop_x_start = (width - crop_width) // 2
+        crop_x_start = (width - crop_width) // 2 + horizontal_offset
         crop_x_end = crop_x_start + crop_width
-        crop_mask = np.zeros_like(image)
+
+        crop_y_start = max(crop_y_start, 0)
+        crop_y_end = min(crop_y_end, height)
+        crop_x_start = max(crop_x_start, 0)
+        crop_x_end = min(crop_x_end, width)
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        crop_mask = np.zeros_like(gray)
         crop_mask[crop_y_start:crop_y_end, crop_x_start:crop_x_end] = 255
 
-        # With HSV, create a mask that only shows the bolt which is black
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        lower_black = np.array([0, 0, 0])
-        upper_black = np.array([180, 255, 30])
-        mask = cv2.inRange(hsv, lower_black, upper_black)
-        res = cv2.bitwise_and(image, image, mask=mask)
-        res = cv2.bitwise_and(res, crop_mask)
+        ret,thresh = cv2.threshold(gray,100, 255, cv2.THRESH_BINARY_INV)
+        thresh = cv2.bitwise_and(thresh, crop_mask)
 
-        gray = cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
-        ret,thresh = cv2.threshold(gray,10,255,0)
         edges = cv2.Canny(thresh, 50, 150) 
 
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        min_area = 30
+        min_area = 20
+        max_area = 1000
         bolt_center_pixels = None
 
         for cnt in contours:
-            if cv2.contourArea(cnt) > min_area:
+            if max_area > cv2.contourArea(cnt) > min_area:
                 approx = cv2.approxPolyDP(cnt, 0.01*cv2.arcLength(cnt, True), True)
                 M = cv2.moments(cnt)
 

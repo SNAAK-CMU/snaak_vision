@@ -1,42 +1,75 @@
 # Managing a submodule
 
-1. if the path of the unet folder changes, fix the path in .gitmodules
-2. to sync changes to the latest pushed state of the submodule in this repo:
+## Meaning of Different Terms:
+1. **Parent Repository:** This repository
+2. **Submodule:** The src/segmentation/UNet folder in this repo
+3. **Module:** The original repository of the submodule
+
+## Management Instructions:
+
+1. If the path of the UNet folder changes, fix the path in .gitmodules
+2. To sync changes to the latest pushed state of the submodule in this repo:
 
     ```bash
     git submodule update
     ```
 
-    This pulls changes from whatever detached HEAD the submodule is currently in
+    This pulls changes from whatever detached HEAD the submodule is currently in, **not the latest state of the original module**
 
-    To checkout to a specific branch in the submodule's original repo:
+3. To checkout to a specific branch in the original module's repo and get its latest state:
 
     ```bash
     git checkout "branch"
+    git pull
     ```
 
-3. to make changes to the UNet repo
-    1. make changes in src/unet
-    2. add and commit
-    3. connect to local branch and push changes:
+    To update this submodule in the parent repository to the latest state of the original module as pulled above:
+
+    ```bash
+    cd ../
+    git add <submodule_folder>
+    git commit -m "updated <submodule> from <branch name> branch"
+    git pull
+    git push
+    ```
+
+3. To make changes to the original module from the submodule directory (avoid):
+    1. Navigate to submodule folder and update its state as per desired baseline, following steps in **2**.
+    2. Make changes, then run:
+        
+        ```bash 
+        git add 
+        git commit -m "<commit message> (from submodule in <parent_repository>)"
+        ```
+
+    3. Connect to a branch and push changes:
+
+        ```bash
+        git push origin HEAD:<branch>
+        ```
+        
+        example:
 
         ```bash
         git push origin HEAD:local
         ```
 
         This will push changes to 'local' branch in submodule repo and detach
-    4. cd into src directory and run
+
+    4. Update this submodule in the parent repository to the latest state of the original module as pushed above:
+
+        ```bash
+        cd ../
+        git add <submodule_folder>
+        git commit -m "updated <submodule> from <branch name> branch"
+        git pull
+        git push
+        ```
+
+        Now the submodule in this parent repository will be connected to the branch of the module that the changes were pushed to 
+    
+    5. Update the submodule wherever the parent repository was cloned:
 
         ```bash
         git submodule update
         ```
-
-    5. Now push the submodule update in the parent repo:
-
-        ```bash
-        cd ..
-        git commit -m "updated submodule to track latest changes to 'local' branch in submodule repo"
-        git pull && git push
-        ```
-
-    Now the submodule is detached and the latest pushed state is saved
