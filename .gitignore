@@ -56,3 +56,5 @@ CATKIN_IGNORE
 # Any test images
 **/*.png
 **/*.jpg
+
+**/.DS_Store
