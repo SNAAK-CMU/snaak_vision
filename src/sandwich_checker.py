@@ -27,7 +27,7 @@ TRAY_BOX_PIX = (
     250,
     20,
     630,
-    300,
+    370,
 )  # (x1, y1, x2, y2) coordinates of the tray box in the image
 
 CHEESE_W = 95  # width of the cheese slice in pixels
@@ -892,7 +892,7 @@ class SandwichChecker:
                 if cheese_crop_sum > max_sum:
                     max_sum = cheese_crop_sum
                     best_cheese_box = cheese_box.copy()
-        
+
         # cv2.imwrite(
         #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/multi_cheese_diff_n2.jpg",
         #     gray_diff,
