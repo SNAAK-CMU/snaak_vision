@@ -79,6 +79,9 @@ HAM_BIN_YMAX = 330
 CHEESE_WIDTH_MOZARELLA = 0.090
 CHEESE_HEIGHT_MOZARELLA = 0.095
 
+CHEESE_TOP_SLICE_PNG = [250, 106, 77]
+# CHEESE_TOP_SLICE_PNG = [250, 250, 55]
+
 # Bread Dimensions in metres
 BREAD_WIDTH = 0.11
 BREAD_HEIGHT = 0.08
@@ -90,6 +93,7 @@ TRAY_HEIGHT = 0.220
 # Ham Dimensions in metres
 # 1098 pix/m ; ham_radius = 52 pix
 BOLOGNA_RADIUS = 0.05 # metres
+BOLOGNA_TOP_SLICE_PNG = [61, 61, 245]
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -146,14 +150,14 @@ class VisionNode(Node):
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
-            model_path="logs/cheese/cheese_check/best_epoch_weights.pth",  # choose weights
+            model_path="logs/cheese/multi_cheese_pickup_and_check/best_epoch_weights.pth",  # choose weights
             mix_type=1,
             num_classes=3,
         )
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
-            model_path="logs/ham/bologna_check/best_epoch_weights.pth",
+            model_path="logs/ham/bologna_pickup_and_check/best_epoch_weights.pth",
             mix_type=1,
             num_classes=5,
         )
@@ -592,8 +596,9 @@ class VisionNode(Node):
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
                     mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
-                        Im.fromarray(unet_input_image), [250, 250, 55]
+                        Im.fromarray(unet_input_image), CHEESE_TOP_SLICE_PNG
                     )
+
                     
                     if max_contour_area > 1.2 * self.cheese_area_pixels:
                         self.get_logger().info(
@@ -609,7 +614,7 @@ class VisionNode(Node):
                         unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
                         
                         mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
-                        Im.fromarray(unet_input_image), [250, 250, 55]
+                        Im.fromarray(unet_input_image), CHEESE_TOP_SLICE_PNG
                         )
                         
                         if max_contour_area > 1.2 * self.cheese_area_pixels:
@@ -693,7 +698,7 @@ class VisionNode(Node):
                     unet_input_image = cv2.bitwise_and(bin_mask, unet_input_image)
 
                     mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
-                        Im.fromarray(unet_input_image), [61, 61, 245]
+                        Im.fromarray(unet_input_image), BOLOGNA_TOP_SLICE_PNG
                     )
                     
                     if max_contour_area > 1.2 * self.ham_area_pixels:
@@ -805,7 +810,7 @@ class VisionNode(Node):
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
 
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.01 if bin_id == BREAD_BIN_ID else -0.007  # TODO: tune these
+            z_offset = 0.007 if bin_id == BREAD_BIN_ID else 0.003  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (

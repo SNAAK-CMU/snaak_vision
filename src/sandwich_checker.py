@@ -33,11 +33,16 @@ TRAY_BOX_PIX = (
 CHEESE_W = 95  # width of the cheese slice in pixels
 BREAD_AREA_PIX = 14500
 
+CHEESE_TOP_SLICE_PNG = [250, 106, 77]
+# CHEESE_TOP_SLICE_PNG = [250, 250, 55]
+
 SAM2_CHECKPOINT = (
     "/home/snaak/Documents/manipulation_ws/src/sam2/checkpoints/sam2.1_hiera_small.pt"
     # "/home/parth/snaak/projects/sam2/checkpoints/sam2.1_hiera_small.pt"
 )
 SAM2_MODEL_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
+
+BOLOGNA_TOP_SLICE_PNG = [61, 61, 245]
 
 ################################
 
@@ -532,7 +537,7 @@ class SandwichChecker:
             # Get the cheese mask using UNet
             mask, max_contour_mask, max_contour_area = (
                 self.cheese_UNet.get_top_layer_binary(
-                    Im.fromarray(unet_input_image), [250, 250, 55]
+                    Im.fromarray(unet_input_image), CHEESE_TOP_SLICE_PNG
                 )
             )
 
@@ -1046,7 +1051,7 @@ class SandwichChecker:
             # Get the ham mask using UNet
             mask, max_contour_mask, max_contour_area = (
                 self.bologna_UNet.get_top_layer_binary(
-                    Im.fromarray(unet_input_image), [61, 61, 245]
+                    Im.fromarray(unet_input_image), BOLOGNA_TOP_SLICE_PNG
                 )
             )
 
