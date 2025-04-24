@@ -808,9 +808,10 @@ class VisionNode(Node):
 
             self.get_logger().info("transforming coordinates...")
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
-
+            if (bin_id == BREAD_BIN_ID and response_transformed[2] < 0.07) or (bin_id != BREAD_BIN_ID and response_transformed[2] < 0.14):
+                raise Exception("Z is too low, not a valid pickup point")
             self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.007 if bin_id == BREAD_BIN_ID else 0.003  # TODO: tune these
+            z_offset = 0.008 if bin_id == BREAD_BIN_ID else 0.004  # TODO: tune these
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
