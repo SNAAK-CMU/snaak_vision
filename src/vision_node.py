@@ -79,8 +79,7 @@ HAM_BIN_YMAX = 330
 CHEESE_WIDTH_MOZARELLA = 0.090
 CHEESE_HEIGHT_MOZARELLA = 0.095
 
-CHEESE_TOP_SLICE_PNG = [250, 106, 77]
-# CHEESE_TOP_SLICE_PNG = [250, 250, 55]
+CHEESE_TOP_SLICE_PNG = [250, 106, 77] # the mask color for top cheese slice
 
 # Bread Dimensions in metres
 BREAD_WIDTH = 0.11
@@ -93,7 +92,7 @@ TRAY_HEIGHT = 0.220
 # Ham Dimensions in metres
 # 1098 pix/m ; ham_radius = 52 pix
 BOLOGNA_RADIUS = 0.05 # metres
-BOLOGNA_TOP_SLICE_PNG = [61, 61, 245]
+BOLOGNA_TOP_SLICE_PNG = [61, 61, 245] # the mask color for top bologna slice
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -150,10 +149,11 @@ class VisionNode(Node):
         self.Cheese_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "top_cheese", "other_cheese"],
-            model_path="logs/cheese/multi_cheese_pickup_and_check/best_epoch_weights.pth",  # choose weights
+            model_path="logs/cheese/UNet_CHE_000/best_epoch_weights.pth",  # choose weights
             mix_type=1,
             num_classes=3,
         )
+        
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
