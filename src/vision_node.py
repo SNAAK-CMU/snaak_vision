@@ -9,7 +9,6 @@ from cv_bridge import CvBridge, CvBridgeError
 from snaak_vision.srv import GetDepthAtPoint
 from snaak_vision.srv import GetXYZFromImage
 from snaak_vision.srv import CheckIngredientPlace
-from snaak_vision.srv import GetBinConfig
 from std_srvs.srv import Trigger
 from std_srvs.srv import Trigger
 import traceback
