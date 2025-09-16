@@ -47,10 +47,7 @@ from sandwich_checker import SandwichChecker
 USE_UNET = True  # Set to True to use UNet, False to use SAM
 USE_UNET_FOR_CHECK = True
 
-# # Make these config
-# HAM_BIN_ID = 1
-# CHEESE_BIN_ID = 2
-# BREAD_BIN_ID = 3
+# Assembly location IDs
 ASSEMBLY_TRAY_ID = 4
 ASSEMBLY_BREAD_ID = 5
 
@@ -75,14 +72,13 @@ BIN1_YMIN = 0
 BIN1_XMAX = 450
 BIN1_YMAX = 330
 
-
-# Bin3 coords (add actual values if available)
+# Bin3 coords 
 BIN3_XMIN = 200  
 BIN3_YMIN = 20  
 BIN3_XMAX = 630  
 BIN3_YMAX = 350 
 
-# BIN_COORDS is an array of bin coordinate arrays: [ [XMIN, YMIN, XMAX, YMAX], ... ]
+# BIN_COORDS
 BIN_COORDS = [
     [BIN1_XMIN, BIN1_YMIN, BIN1_XMAX, BIN1_YMAX],
     [BIN2_XMIN, BIN2_YMIN, BIN2_XMAX, BIN2_YMAX],
@@ -98,6 +94,8 @@ CHEESE_TOP_SLICE_PNG = [250, 106, 77] # the mask color for top cheese slice
 # Bread Dimensions in metres
 BREAD_WIDTH = 0.11
 BREAD_HEIGHT = 0.08
+BREAD_TOP_SLICE_PNG = [250, 106, 77] # the mask color for top cheese slice
+
 
 # Tray Dimensions in metres
 TRAY_WIDTH = 0.305
@@ -106,7 +104,7 @@ TRAY_HEIGHT = 0.220
 # Ham Dimensions in metres
 # 1098 pix/m ; ham_radius = 52 pix
 BOLOGNA_RADIUS = 0.05 # metres
-BOLOGNA_TOP_SLICE_PNG = [61, 61, 245] # the mask color for top bologna slice
+MEAT_TOP_SLICE_PNG = [61, 61, 245] # the mask color for top bologna slice
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
@@ -138,9 +136,9 @@ class VisionNode(Node):
         self.bread_height = BREAD_HEIGHT
         self.cheese_width = CHEESE_WIDTH_MOZARELLA
         self.cheese_height = CHEESE_HEIGHT_MOZARELLA
-        self.ham_radius = BOLOGNA_RADIUS
+        self.meat_radius = BOLOGNA_RADIUS
         self.cheese_area_pixels = self.cheese_width * self.cheese_height * (1 / self.pixels_to_m**2)
-        self.meat_area_pixels = np.pi * (self.ham_radius**2) * (1 / self.pixels_to_m**2)
+        self.meat_area_pixels = np.pi * (self.meat_radius**2) * (1 / self.pixels_to_m**2)
 
         # image size
         self.image_width = IMG_WIDTH
@@ -177,7 +175,9 @@ class VisionNode(Node):
         )
         self.Bread_UNet = Ingredients_UNet(
             count = False,
-            classes=["background," " top_bread", "other_bread"],
+            classes = ["background", "top_bread", "other_bread"],
+            mix_type = 1,
+            num_classes = 3,
             model_path = "logs/bread/UNet_BRE_000/best_epoch_weights.pth"
         )
 
@@ -193,7 +193,7 @@ class VisionNode(Node):
             cheese_dims_m=[self.cheese_width, self.cheese_height],
             tray_dims_m=[self.tray_width, self.tray_height],
             bread_dims_m=[self.bread_width, self.bread_height],
-            ham_radius_m=self.ham_radius,
+            ham_radius_m=self.meat_radius,
             cheese_UNet = self.Cheese_UNet,
             bologna_UNet = self.Bologna_UNet,
             use_unet = self.use_UNet_for_check,
@@ -586,7 +586,7 @@ class VisionNode(Node):
             if self.rgb_image is None:
                 raise Exception("No RGB image found!")
 
-            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            image = np.copy(self.rgb_image)
             # self.get_logger().info(f"{image.shape}")
             self.detection_image = np.copy(image)
 
@@ -595,22 +595,34 @@ class VisionNode(Node):
             # Bin Cropping Logic
             bin_coords = BIN_COORDS[bin_id-1]
             x_min, y_min, x_max, y_max = bin_coords
-            cropped_image = image[y_min:y_max, x_min:x_max]
-            cropped_image_bgr = cv2.cvtColor(cropped_image, cv2.COLOR_RGB2BGR)
+            self.get_logger().info(f"Cropping with X coords: [{x_min}, {x_max}] and Y coords: [{y_min}, {y_max}]")
+            bin_mask = np.zeros_like(image, dtype=np.uint8)
+            bin_mask[y_min:y_max, x_min:x_max] = 1
+            masked_image = image * bin_mask
+            masked_image_bgr = cv2.cvtColor(masked_image, cv2.COLOR_RGB2BGR)
 
             # Ingredient Segmentation Logic
             if ingredient_name == "Cheese":
                 self.get_logger().info(f"Segmenting cheese...")
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_source_image.jpg",
+                    cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_masked_image.jpg",
+                    masked_image_bgr,
+                )
                 # Get binary mask
                 if self.use_SAM:
                     if self.cheese_segment_generator:
-                        mask = self.cheese_segment_generator.get_top_cheese_slice(cropped_image_bgr) 
+                        mask = self.cheese_segment_generator.get_top_cheese_slice(masked_image_bgr)
                         self.get_logger().info("Got mask from SAM")
                     else:
                         raise Exception("No SAM model created for cheese!")
                 elif self.use_UNet:
                     mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
-                        Im.fromarray(cropped_image), CHEESE_TOP_SLICE_PNG
+                        Im.fromarray(masked_image), CHEESE_TOP_SLICE_PNG
                     )
                     # If area is too large, crop out bottom 50% and try again
                     if max_contour_area > 1.2 * self.cheese_area_pixels:
@@ -618,9 +630,11 @@ class VisionNode(Node):
                             f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
                         half_height = (y_max - y_min) // 2
-                        cropped_image_half = self.rgb_image[y_min:y_min+half_height, x_min:x_max].copy()
+                        half_bin_mask = np.zeros_like(image, dtype=np.uint8)
+                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
-                            Im.fromarray(cropped_image_half), CHEESE_TOP_SLICE_PNG
+                            Im.fromarray(masked_image_half), CHEESE_TOP_SLICE_PNG
                         )
                         if max_contour_area > 1.2 * self.cheese_area_pixels:
                             self.get_logger().info(
@@ -629,31 +643,15 @@ class VisionNode(Node):
                             raise Exception(
                                 f"Cheese area after 50% crop is still too large: {max_contour_area} > {self.cheese_area_pixels}"
                             )
-                    # Save cropped image for debugging
                     cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_input_image.jpg",
-                        cv2.cvtColor(cropped_image, cv2.COLOR_RGB2BGR),
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_mask.jpg",
+                        np.array(mask),
                     )
                     self.get_logger().info(f"Got mask from UNet, Cheese Area: {max_contour_area}")
                     mask = max_contour_mask  # choose the largest contour
                 else:
                     self.get_logger().info("Neither SAM nor UNet were chosen")
                     raise Exception("No segmentation method chosen")
-
-                # Save images for debugging
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_source_image.jpg",
-                    cropped_image_bgr,
-                )
-                if self.use_UNet:
-                    cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_mask.jpg",
-                        np.array(mask),
-                    )
-                # cv2.imwrite(
-                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/max_cheese_mask.jpg",
-                #     max_contour_mask,
-                # )
 
                 mask_truth_value = np.max(np.array(mask))
 
@@ -667,24 +665,29 @@ class VisionNode(Node):
                 cam_y = int(np.mean(y_coords))
 
                 #self.get_logger().info(f"Cheese pickup point {cam_x}, {cam_y}")
-                cv2.circle(cropped_image_bgr, (int(cam_x), int(cam_y)), 10, color=(255, 0, 0), thickness=-1)
+                cv2.circle(masked_image_bgr, (int(cam_x), int(cam_y)), 10, color=(255, 0, 0), thickness=-1)
 
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_point.jpg",
-                    cropped_image_bgr,
+                    masked_image_bgr,
                 )
 
             elif ingredient_name == "Meat":
                 # Meat
-
-                self.get_logger().info(f"Segmenting Meat")
-
+                self.get_logger().info(f"Segmenting Meat...")
+                # Save images for debugging
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_pickup_source_image.jpg",
+                    cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_pickup_masked_image.jpg",
+                    masked_image_bgr,
+                )
                 if self.use_SAM:
                     # Get X, Y using SAM
                     if self.meat_segment_generator:
-                        cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(
-                            cropped_image_bgr
-                        )
+                        cam_x, cam_y = self.meat_segment_generator.get_top_meat_slice_xy(masked_image_bgr)
                     else:
                         raise Exception("No SAM Model created for meat!")
                     self.get_logger().info("Got mask from SAM")
@@ -693,20 +696,21 @@ class VisionNode(Node):
                 elif self.use_UNet:
                     # Use the already cropped image for UNet segmentation
                     mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
-                        Im.fromarray(cropped_image), BOLOGNA_TOP_SLICE_PNG
+                        Im.fromarray(masked_image), MEAT_TOP_SLICE_PNG
                     )
                     
-                    if max_contour_area > 1.2 * self.Meat_area_pixels:
+                    if max_contour_area > 1.2 * self.meat_area_pixels:
                         self.get_logger().info(
                             f"Meat area is too large: {max_contour_area} > {self.meat_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
                         
                         # Crop out bottom 50% of the already cropped image
                         half_height = (y_max - y_min) // 2
-                        cropped_image_half = self.rgb_image[y_min:y_min+half_height, x_min:x_max].copy()
-                        
+                        half_bin_mask = np.zeros_like(image, dtype=np.uint8)
+                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
-                            Im.fromarray(cropped_image_half), BOLOGNA_TOP_SLICE_PNG
+                            Im.fromarray(masked_image_half), MEAT_TOP_SLICE_PNG
                         )
                         
                         if max_contour_area > 1.5 * self.meat_area_pixels:
@@ -716,11 +720,10 @@ class VisionNode(Node):
                             raise Exception(
                                 f"Meat area after 75% crop is still too large: {max_contour_area} > {self.meat_area_pixels}"
                             )
-                    
-                    # save image for debugging
+                        
                     cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_unet_input_image.jpg",
-                        cv2.cvtColor(cropped_image, cv2.COLOR_RGB2BGR),
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_pickup_unet_mask.jpg",
+                        np.array(mask),
                     )
                     
                     self.get_logger().info(f"Got mask from UNet, Meat Area: {max_contour_area}")
@@ -740,50 +743,47 @@ class VisionNode(Node):
                     raise Exception("No segmentation method chosen")
 
                 self.get_logger().info(f"Mid point {cam_x}, {cam_y}")
-                
-                # Save images for debugging
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_source_image.jpg",
-                    cropped_image_bgr,
-                )
-                if self.use_UNet:
-                    cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_unet_mask.jpg",
-                       np.array(mask),
-                    )
 
-                cv2.circle(cropped_image_bgr, (int(cam_x), int(cam_y)), 10, color=(255, 0, 0), thickness=-1)
+                cv2.circle(masked_image_bgr, (int(cam_x), int(cam_y)), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_pickup_point.jpg",
-                    cropped_image_bgr,
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_pickup_point.jpg",
+                    masked_image_bgr,
                 )
 
             elif ingredient_name == "Bread":
                 # Bread
-                
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_source_image.jpg",
+                    cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
+                )
+                cv2.imwrite(
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_masked_image.jpg",
+                    masked_image_bgr,
+                )
                 if self.use_UNet:
+                     # Save cropped image for debugging
+                    
                     # Use the UNet model for bread segmentation
                     mask, max_contour_mask, max_contour_area = self.Bread_UNet.get_top_layer_binary(
-                        Im.fromarray(cropped_image), [255, 255, 255]  # Assuming white for top bread, update color if needed
+                        Im.fromarray(masked_image), BREAD_TOP_SLICE_PNG 
                     )
-                    
                     # If area is too large, crop out bottom 50% and try again
                     if max_contour_area > 1.2 * (self.bread_width * self.bread_height * (1 / self.pixels_to_m**2)):
                         self.get_logger().info(
                             f"Bread area is too large, cropping out bottom 50% of bin and trying again..."
                         )
                         half_height = (y_max - y_min) // 2
-                        cropped_image_half = self.rgb_image[y_min:y_min+half_height, x_min:x_max].copy()
+                        half_bin_mask = np.zeros_like(image, dtype=np.uint8)
+                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Bread_UNet.get_top_layer_binary(
-                            Im.fromarray(cropped_image_half), [255, 255, 255]  # Assuming white for top bread
+                            Im.fromarray(masked_image_half), BREAD_TOP_SLICE_PNG
                         )
                     
-                    # Save cropped image for debugging
                     cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_unet_input_image.jpg",
-                        cv2.cvtColor(cropped_image, cv2.COLOR_RGB2BGR),
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_unet_mask.jpg",
+                        np.array(mask),
                     )
-                    
                     self.get_logger().info(f"Got mask from UNet for bread")
                     mask = max_contour_mask  # choose the largest contour
                     
@@ -797,26 +797,14 @@ class VisionNode(Node):
                     cam_y = int(np.mean(y_coords))
                 else:
                     cam_x, cam_y = self.bread_segment_generator.get_bread_pickup_point(
-                    cropped_image_bgr
+                    masked_image_bgr
                     )
                     mask = None
 
-                # Save images for debugging
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_source_image.jpg",
-                    cropped_image_bgr,
-                )
-                
-                if self.use_UNet:
-                    cv2.imwrite(
-                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_unet_mask.jpg",
-                        np.array(mask),
-                    )
-                
-                cv2.circle(cropped_image_bgr, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                cv2.circle(masked_image_bgr, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_point.jpg",
-                    cropped_image_bgr,
+                    masked_image_bgr,
                 )
 
             else:
