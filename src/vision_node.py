@@ -602,7 +602,7 @@ class VisionNode(Node):
             masked_image_bgr = cv2.cvtColor(masked_image, cv2.COLOR_RGB2BGR)
 
             # Ingredient Segmentation Logic
-            if ingredient_name == "Cheese":
+            if ingredient_name == "cheese":
                 self.get_logger().info(f"Segmenting cheese...")
                 # Save images for debugging
                 cv2.imwrite(
@@ -672,7 +672,7 @@ class VisionNode(Node):
                     masked_image_bgr,
                 )
 
-            elif ingredient_name == "Meat":
+            elif ingredient_name == "meat":
                 # Meat
                 self.get_logger().info(f"Segmenting Meat...")
                 # Save images for debugging
@@ -750,7 +750,7 @@ class VisionNode(Node):
                     masked_image_bgr,
                 )
 
-            elif ingredient_name == "Bread":
+            elif ingredient_name == "bread":
                 # Bread
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_source_image.jpg",
