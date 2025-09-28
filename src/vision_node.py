@@ -73,10 +73,10 @@ BIN1_XMAX = 450
 BIN1_YMAX = 330
 
 # Bin3 coords 
-BIN3_XMIN = 200  
-BIN3_YMIN = 20  
-BIN3_XMAX = 630  
-BIN3_YMAX = 350 
+BIN3_XMIN = 355 
+BIN3_YMIN = 0 
+BIN3_XMAX = 565  
+BIN3_YMAX = 330 
 
 # BIN_COORDS
 BIN_COORDS = [
@@ -92,8 +92,8 @@ CHEESE_HEIGHT_MOZARELLA = 0.095
 CHEESE_TOP_SLICE_PNG = [250, 106, 77] # the mask color for top cheese slice
 
 # Bread Dimensions in metres
-BREAD_WIDTH = 0.11
-BREAD_HEIGHT = 0.08
+BREAD_WIDTH = 0.15
+BREAD_HEIGHT = 0.10
 BREAD_TOP_SLICE_PNG = [250, 106, 77] # the mask color for top cheese slice
 
 
@@ -590,8 +590,8 @@ class VisionNode(Node):
             # self.get_logger().info(f"{image.shape}")
             self.detection_image = np.copy(image)
 
-            self.get_logger().info(f"Got request for pickup point in bin ID: {bin_id}")
 
+            self.get_logger().info(f"Got request for pickup point in bin ID: {bin_id}")
             # Bin Cropping Logic
             bin_coords = BIN_COORDS[bin_id-1]
             x_min, y_min, x_max, y_max = bin_coords
@@ -752,6 +752,7 @@ class VisionNode(Node):
 
             elif ingredient_name == "bread":
                 # Bread
+                print('Segmenting Bread...')
                 cv2.imwrite(
                     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_source_image.jpg",
                     cv2.cvtColor(image, cv2.COLOR_RGB2BGR),
