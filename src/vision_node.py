@@ -60,7 +60,9 @@ IMG_HEIGHT = 480
 
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 
-# Bin2 coords
+
+# Bin coordinates in wrist camera image from pregrasp position (used for masking the image)
+# Bin2 coords 
 BIN2_XMIN = 250
 BIN2_YMIN = 0
 BIN2_XMAX = 470
@@ -78,11 +80,32 @@ BIN3_YMIN = 20
 BIN3_XMAX = 630  
 BIN3_YMAX = 350 
 
+# Bin 4 coords
+BIN4_XMIN = 81
+BIN4_YMIN = 66
+BIN4_XMAX = 440
+BIN4_YMAX = 297
+
+# Bin 5 coords
+BIN5_XMIN = 67
+BIN5_YMIN = 72
+BIN5_XMAX = 434
+BIN5_YMAX = 305
+
+# Bin 6 coords
+BIN6_XMIN = 69
+BIN6_YMIN = 94
+BIN6_XMAX = 433
+BIN6_YMAX = 316
+
 # BIN_COORDS
 BIN_COORDS = [
     [BIN1_XMIN, BIN1_YMIN, BIN1_XMAX, BIN1_YMAX],
     [BIN2_XMIN, BIN2_YMIN, BIN2_XMAX, BIN2_YMAX],
-    [BIN3_XMIN, BIN3_YMIN, BIN3_XMAX, BIN3_YMAX]
+    [BIN3_XMIN, BIN3_YMIN, BIN3_XMAX, BIN3_YMAX],
+    [BIN4_XMIN, BIN4_YMIN, BIN4_XMAX, BIN4_YMAX],
+    [BIN5_XMIN, BIN5_YMIN, BIN5_XMAX, BIN5_YMAX],
+    [BIN6_XMIN, BIN6_YMIN, BIN6_XMAX, BIN6_YMAX],
 ]
 
 # Cheese Dimensions in metres
