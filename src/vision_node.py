@@ -41,6 +41,7 @@ from segmentation.segment_utils import (
 from segmentation.UNet.ingredients_UNet import Ingredients_UNet
 
 from sandwich_checker import SandwichChecker
+from datetime import datetime
 
 ############### Parameters #################
 
@@ -668,7 +669,7 @@ class VisionNode(Node):
                             )
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_pickup_unet_mask.jpg",
-                        np.array(mask),
+                        cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
                     )
                     self.get_logger().info(f"Got mask from UNet, Cheese Area: {max_contour_area}")
                     mask = max_contour_mask  # choose the largest contour
@@ -746,7 +747,7 @@ class VisionNode(Node):
                         
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/meat_pickup_unet_mask.jpg",
-                        np.array(mask),
+                        cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
                     )
                     
                     self.get_logger().info(f"Got mask from UNet, Meat Area: {max_contour_area}")
@@ -806,7 +807,7 @@ class VisionNode(Node):
                     
                     cv2.imwrite(
                         "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_pickup_unet_mask.jpg",
-                        np.array(mask),
+                        cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
                     )
                     self.get_logger().info(f"Got mask from UNet for bread")
                     mask = max_contour_mask  # choose the largest contour
@@ -909,8 +910,9 @@ class VisionNode(Node):
                 self.get_logger().info(f"Created directory: {FAILURE_IMAGES_PATH}")
 
             # Save the detection image
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(
-                FAILURE_IMAGES_PATH, f"failure_image_{self.detection_image_count}.jpg"
+                FAILURE_IMAGES_PATH, f"failure_image_{self.detection_image_count}_{timestamp}.jpg"
             )
             cv2.imwrite(filename, self.detection_image)
             self.get_logger().info(f"Saved detection image to {filename}")
@@ -992,7 +994,7 @@ class VisionNode(Node):
                     mask,
                 )
                 cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread__place_img.jpg",
+                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_img.jpg",
                     image,
                 )
             

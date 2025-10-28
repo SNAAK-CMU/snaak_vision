@@ -577,12 +577,12 @@ class SandwichChecker:
             # save images for debugging
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_input_image.jpg",
-                unet_input_image,
+                cv2.cvtColor(np.array(unet_input_image), cv2.COLOR_RGB2BGR),
             )
 
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/cheese_assembly_unet_mask.jpg",
-                mask,
+                cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
             )
 
             # check mask
@@ -1090,7 +1090,7 @@ class SandwichChecker:
             # save images for debugging
             cv2.imwrite(
                 "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bologna_assembly_unet_input_image.jpg",
-                unet_input_image,
+                cv2.cvtColor(np.array(unet_input_image), cv2.COLOR_RGB2BGR)
             )
 
             cv2.imwrite(
@@ -1264,7 +1264,7 @@ class SandwichChecker:
             return self.check_bread_bottom(image)
         elif ingredient_name == "cheese":
             return self.check_cheese(image, ingredient_count)
-        elif ingredient_name == "ham":
+        elif ingredient_name == "meat":
             return self.check_ham(image)
         elif ingredient_name == "bread_top":
             return self.check_bread_top(image)
