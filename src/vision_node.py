@@ -914,7 +914,7 @@ class VisionNode(Node):
             filename = os.path.join(
                 FAILURE_IMAGES_PATH, f"failure_image_{self.detection_image_count}_{timestamp}.jpg"
             )
-            cv2.imwrite(filename, self.detection_image)
+            cv2.imwrite(filename, cv2.cvtColor(self.detection_image, cv2.COLOR_RGB2BGR))
             self.get_logger().info(f"Saved detection image to {filename}")
             self.detection_image_count += 1
 
