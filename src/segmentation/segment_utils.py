@@ -13,7 +13,9 @@ SUCTION_CUP_RADIUS = 0.03 * 1.1  # * 1.5 for buffer
 BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
 BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)]
 BIN3_PICKUP_AREA = [(0.177, -0.24), (0.307, -0.48)]
-
+BIN6_PICKUP_AREA = [(0.562, 0.24), (0.69, 0.48)] # TODO: verify these if possible
+BIN5_PICKUP_AREA = [(0.372, 0.24), (0.5, 0.48)]
+BIN4_PICKUP_AREA = [(0.177, 0.24), (0.307, 0.48)]
 ############################################
 
 
@@ -215,6 +217,12 @@ def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id):
         pickup_area = BIN2_PICKUP_AREA
     elif bin_id == 3:
         pickup_area = BIN3_PICKUP_AREA
+    elif bin_id == 4:
+        pickup_area = BIN4_PICKUP_AREA
+    elif bin_id == 5:
+        pickup_area = BIN5_PICKUP_AREA
+    elif bin_id == 6:
+        pickup_area = BIN6_PICKUP_AREA
     else:
         raise Exception("Not a valid bin id")
 
