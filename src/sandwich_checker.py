@@ -63,6 +63,7 @@ class SandwichChecker:
         tray_center=None,
         cheese_UNet=None,
         bologna_UNet=None,
+        bread_UNet=None,
         use_unet=False,
         ham_radius_m=0.05,
     ):
@@ -109,6 +110,7 @@ class SandwichChecker:
         self.cheese_UNet = cheese_UNet
         self.bologna_UNet = bologna_UNet
         self.use_unet = use_unet
+        self.bread_UNet = bread_UNet
 
         self.node_logger = node_logger
         if self.node_logger is not None:
@@ -359,10 +361,51 @@ class SandwichChecker:
 
         # TODO: handle case when bread or tray are not detected in image
 
-        bread_mask = self.get_bread_placement_mask_bottom(image)
+        if self.use_unet:
+            # use UNet to get bread mask
+            # convert image to RGB
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            assembly_mask = np.zeros_like(image_rgb)
+            assembly_mask[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ] = 255
+            unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
+
+            # Get the bread mask using UNet
+            mask, max_contour_mask, max_contour_area = self.bread_UNet.get_top_layer_binary(
+                Im.fromarray(unet_input_image), CHEESE_TOP_SLICE_PNG
+            )
+
+            # choose the largest contour
+            mask = max_contour_mask
+            self.node_logger.info(
+                "Used UNet to get assembly bread mask of area: {}".format(
+                    max_contour_area
+                )
+            )
+
+            # save images for debugging
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bottom_bread_assembly_unet_input_image.jpg",
+                cv2.cvtColor(np.array(unet_input_image), cv2.COLOR_RGB2BGR),
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bottom_bread_assembly_unet_mask.jpg",
+                cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
+            )
+            # check mask
+            mask_truth_value = np.max(mask)
+            if mask_truth_value == 0:
+                raise Exception(
+                    "UNet did not detect any bread in assembly area. Please check the image."
+                )
+        else:
+            bread_mask = self.get_bread_placement_mask_bottom(image)
+
         y_coords, x_coords = np.where(bread_mask == 255)
         center_x = int(np.mean(x_coords))
         center_y = int(np.mean(y_coords))
+
         bread_center = (center_x, center_y)
         self.bread_centers.append(bread_center)
 
@@ -395,6 +438,12 @@ class SandwichChecker:
                 (0, 255, 0),
                 -1,
             )
+        
+        # save image for debugging
+        cv2.imwrite(
+            "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bottom_bread_assembly_check.jpg",
+            plot_image,
+        )
 
         # Write distance and pass threshold on the image
         cv2.putText(
@@ -431,7 +480,59 @@ class SandwichChecker:
         return bread_on_tray, plot_image
 
     def check_bread_top(self, image):
-        bread_center, plot_image = self.get_bread_top_placement_xy(image)
+
+        if self.use_unet:
+            # use UNet to get bread mask
+            # convert image to RGB
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            assembly_mask = np.zeros_like(image_rgb)
+            assembly_mask[
+                TRAY_BOX_PIX[1] : TRAY_BOX_PIX[3], TRAY_BOX_PIX[0] : TRAY_BOX_PIX[2]
+            ] = 255
+            unet_input_image = cv2.bitwise_and(image_rgb, assembly_mask)
+
+            # Get the bread mask using UNet
+            mask, max_contour_mask, max_contour_area = self.bread_UNet.get_top_layer_binary(
+                Im.fromarray(unet_input_image), CHEESE_TOP_SLICE_PNG
+            )
+
+            # choose the largest contour
+            mask = max_contour_mask
+            self.node_logger.info(
+                "Used UNet to get assembly bread mask of area: {}".format(
+                    max_contour_area
+                )
+            )
+
+            # save images for debugging
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/top_bread_assembly_unet_input_image.jpg",
+                cv2.cvtColor(np.array(unet_input_image), cv2.COLOR_RGB2BGR),
+            )
+            cv2.imwrite(
+                "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/top_bread_assembly_unet_mask.jpg",
+                cv2.cvtColor(np.array(mask), cv2.COLOR_RGB2BGR),
+            )
+            # check mask
+            mask_truth_value = np.max(mask)
+            if mask_truth_value == 0:
+                raise Exception(
+                    "UNet did not detect any bread in assembly area. Please check the image."
+                )
+            # get center
+            y_coords, x_coords = np.where(mask == mask_truth_value)
+            cam_x = int(np.mean(x_coords))
+            cam_y = int(np.mean(y_coords))
+            bread_center = (cam_x, cam_y)
+
+            plot_image = image.copy()
+            cv2.circle(
+                plot_image, (int(bread_center[0]), int(bread_center[1])), 7, (0, 0, 255), -1
+            )
+            
+        else:
+            bread_center, plot_image = self.get_bread_top_placement_xy(image)
+
         bottom_bread_center = self.bread_centers[-1]
         self.bread_centers.append(bread_center)
 
@@ -459,6 +560,17 @@ class SandwichChecker:
                 (0, 255, 0),
                 -1,
             )
+
+        # draw top bread center on image
+        cv2.circle(
+            plot_image, (int(bread_center[0]), int(bread_center[1])), 5, (0, 0, 255), -1
+        )
+        
+        # save image for debugging
+        cv2.imwrite(
+            "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/top_bread_assembly_check.jpg",
+            plot_image,
+        )
 
         # Write distance and pass threshold on the image
         cv2.putText(
@@ -714,18 +826,19 @@ class SandwichChecker:
 
         # Check if cheese is placed within threshold distance from bread
         valid_cheese = False
-        for bread_center in self.bread_centers:
-            distance = (
-                (bread_center[0] - cheese_center[0]) ** 2
-                + (bread_center[1] - cheese_center[1]) ** 2
-            ) ** 0.5
-            self.node_logger.info(
-                f"Distance between cheese center {cheese_center} and bread center {bread_center}: {distance}"
-            )
+        # for bread_center in self.bread_centers: # check against all bread centers
+        bread_center = self.bread_centers[0]  # only check against bottom bread center
+        distance = (
+            (bread_center[0] - cheese_center[0]) ** 2
+            + (bread_center[1] - cheese_center[1]) ** 2
+        ) ** 0.5
+        self.node_logger.info(
+            f"Distance between cheese center {cheese_center} and bread center {bread_center}: {distance}"
+        )
 
-            if distance < self.pass_threshold:
-                valid_cheese = True
-                break
+        if distance < self.pass_threshold:
+            valid_cheese = True
+            # break
 
         # Visualize cheese localization
         plot_image = image.copy()
@@ -787,6 +900,7 @@ class SandwichChecker:
     def check_cheese_multi(self, image, ingredient_count):
 
         # TODO: handle case when no cheese is detected in image
+        # TODO: Use UNet for cheese segmentation
 
         # get images
         total_images = len(self.place_images)
@@ -949,18 +1063,19 @@ class SandwichChecker:
         # Check if cheese is placed within threshold distance from bread
         valid_cheese = False
         distance = -1
-        for bread_center in self.bread_centers:
-            distance = (
-                (bread_center[0] - multi_cheese_center[0]) ** 2
-                + (bread_center[1] - multi_cheese_center[1]) ** 2
-            ) ** 0.5
-            self.node_logger.info(
+        # for bread_center in self.bread_centers: # check against all bread centers
+        bread_center = self.bread_centers[0]  # only check against bottom bread center
+        distance = (
+            (bread_center[0] - multi_cheese_center[0]) ** 2
+            + (bread_center[1] - multi_cheese_center[1]) ** 2
+        ) ** 0.5
+        self.node_logger.info(
                 f"Distance between cheese center {multi_cheese_center} and bread center {bread_center}: {distance}"
             )
 
-            if distance < self.pass_threshold:
-                valid_cheese = True
-                break
+        if distance < self.pass_threshold:
+            valid_cheese = True
+            # break
 
         # Visualize cheese localization
         plot_image = image.copy()
