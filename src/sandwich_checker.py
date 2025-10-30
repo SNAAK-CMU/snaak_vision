@@ -399,6 +399,7 @@ class SandwichChecker:
                 raise Exception(
                     "UNet did not detect any bread in assembly area. Please check the image."
                 )
+            bread_mask = mask
         else:
             bread_mask = self.get_bread_placement_mask_bottom(image)
 
