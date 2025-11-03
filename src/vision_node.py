@@ -876,10 +876,11 @@ class VisionNode(Node):
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
             is_reachable = is_valid_pickup_point(
-                response.x, response.y, bin_id, 3
+                response.x, response.y, bin_id, 3, self.get_logger()
             )
             if not is_reachable:
                 raise Exception("Pickup points not within bin")
+            self.get_logger().info("Pickup point is valid!")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
