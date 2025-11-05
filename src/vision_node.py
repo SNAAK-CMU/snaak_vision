@@ -193,7 +193,7 @@ class VisionNode(Node):
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
-            model_path="logs/ham/bologna_pickup_and_check/best_epoch_weights.pth",
+            model_path="logs/ham/UNet_BOL_000/best_epoch_weights.pth",
             mix_type=1,
             num_classes=5,
         )
@@ -202,7 +202,7 @@ class VisionNode(Node):
             classes = ["background", "top_bread", "other_bread"],
             mix_type = 1,
             num_classes = 3,
-            model_path = "logs/bread/UNet_BRE_000/best_epoch_weights.pth"
+            model_path = "logs/bread/UNet_BRE_001/best_epoch_weights.pth"
         )
 
         # init sandwich checker
