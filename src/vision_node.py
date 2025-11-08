@@ -193,7 +193,7 @@ class VisionNode(Node):
         self.Bologna_UNet = Ingredients_UNet(
             count=False,
             classes=["background", "", "", "top_bologna", "other_bologna"],
-            model_path="logs/ham/bologna_pickup_and_check/best_epoch_weights.pth",
+            model_path="logs/ham/UNet_BOL_000/best_epoch_weights.pth",
             mix_type=1,
             num_classes=5,
         )
@@ -202,7 +202,7 @@ class VisionNode(Node):
             classes = ["background", "top_bread", "other_bread"],
             mix_type = 1,
             num_classes = 3,
-            model_path = "logs/bread/UNet_BRE_000/best_epoch_weights.pth"
+            model_path = "logs/bread/UNet_BRE_001/best_epoch_weights.pth"
         )
 
         # init sandwich checker
@@ -220,6 +220,7 @@ class VisionNode(Node):
             ham_radius_m=self.meat_radius,
             cheese_UNet = self.Cheese_UNet,
             bologna_UNet = self.Bologna_UNet,
+            bread_UNet = self.Bread_UNet,
             use_unet = self.use_UNet_for_check,
         )
 
@@ -875,10 +876,11 @@ class VisionNode(Node):
                 f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
             )
             is_reachable = is_valid_pickup_point(
-                response.x, response.y, bin_id, 3
+                response.x, response.y, bin_id, 3, self.get_logger()
             )
             if not is_reachable:
                 raise Exception("Pickup points not within bin")
+            self.get_logger().info("Pickup point is valid!")
 
         except Exception as e:
             self.get_logger().error(f"Error while calculating pickup point: {e}")
@@ -976,27 +978,30 @@ class VisionNode(Node):
                 )
 
             elif location_id == ASSEMBLY_BREAD_ID:
-                image = cv2.cvtColor(np.array(self.rgb_image), cv2.COLOR_RGB2BGR)
-                self.get_logger().info(f"Segmenting Bread")
-                mask = self.bread_segment_generator.get_bread_placement_mask(image)
+                # image = cv2.cvtColor(np.array(self.rgb_image), cv2.COLOR_RGB2BGR)
+                # self.get_logger().info(f"Segmenting Bread")
+                # mask = self.bread_segment_generator.get_bread_placement_mask(image)
 
-                self.get_logger().info(f"Bread segmentation completed")
+                # self.get_logger().info(f"Bread segmentation completed")
 
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 255)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+                # # Average the positions of white points to get center
+                # y_coords, x_coords = np.where(mask == 255)
+                # cam_x = int(np.mean(x_coords))
+                # cam_y = int(np.mean(y_coords))
 
-                # Save images for debugging
-                cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_mask.jpg",
-                    mask,
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_img.jpg",
-                    image,
-                )
+                # # Save images for debugging
+                # cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_mask.jpg",
+                #     mask,
+                # )
+                # cv2.imwrite(
+                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_img.jpg",
+                #     image,
+                # )
+                bottom_bread_center = self.sandwich_checker.bread_centers[0]
+                cam_x = int(bottom_bread_center[0])
+                cam_y = int(bottom_bread_center[1])
             
             else:
                 raise Exception(f"Got unknown place location ID:{location_id})")

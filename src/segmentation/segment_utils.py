@@ -8,7 +8,7 @@ import cv2
 
 ############### Parameters #################
 
-SUCTION_CUP_RADIUS = 0.03 * 1.1  # * 1.5 for buffer
+SUCTION_CUP_RADIUS = 0.03 * 1.1  # * 1.1 for buffer
 # bottom left and top right point of bin in arm link0 frame
 BIN1_PICKUP_AREA = [(0.562, -0.24), (0.69, -0.48)]
 BIN2_PICKUP_AREA = [(0.372, -0.24), (0.5, -0.48)]
@@ -210,7 +210,7 @@ def keep_largest_blob(binary_image):
     return largest_blob_image
 
 
-def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id):
+def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id, logger=None):
     if bin_id == 1:
         pickup_area = BIN1_PICKUP_AREA
     elif bin_id == 2:
@@ -225,19 +225,22 @@ def is_valid_pickup_point(X_pickup, Y_pickup, bin_id, bread_bin_id):
         pickup_area = BIN6_PICKUP_AREA
     else:
         raise Exception("Not a valid bin id")
-
+    
     # bl -> bottom left, tr -> top right
     bl_X, bl_Y = pickup_area[0]
     tr_X, tr_Y = pickup_area[1]
 
     r_cup = SUCTION_CUP_RADIUS
-    if bin_id == bread_bin_id:
-        tr_Y += 0.1
-        # need to account for camera, but not cup on far right side (this offsets addition below)
-        tr_Y -= r_cup
+    # Removed this check because the bread bin is not deep enough for the camera to collide
+    # if bin_id == bread_bin_id:
+    #     tr_Y += 0.1
+    #     # need to account for camera, but not cup on far right side (this offsets addition below)
+    #     tr_Y -= r_cup
 
     # Two y conditions since we can have negative y values, just want to make sure we are
     # in between the bounds
+    if logger is not None:
+        logger.info(f"Checking pickup point ({X_pickup}, {Y_pickup}) in bin {bin_id} with bounds X: [{bl_X + r_cup}, {tr_X - r_cup}], Y: [{max(bl_Y - r_cup, tr_Y + r_cup)}, {min(bl_Y - r_cup, tr_Y + r_cup)}]")
     if bl_X + r_cup <= X_pickup <= tr_X - r_cup and (
         bl_Y - r_cup <= Y_pickup <= tr_Y + r_cup
         or tr_Y + r_cup <= Y_pickup <= bl_Y - r_cup
