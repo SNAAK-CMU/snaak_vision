@@ -654,9 +654,18 @@ class VisionNode(Node):
                         self.get_logger().info(
                             f"Cheese area is too large: {max_contour_area} > {self.cheese_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
-                        half_height = (y_max - y_min) // 2
+                        # Mask out the bottom 50% along the longer axis (x or y)
+                        bin_width = x_max - x_min
+                        bin_height = y_max - y_min
                         half_bin_mask = np.zeros_like(image, dtype=np.uint8)
-                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        if bin_height >= bin_width:
+                            # keep top half (smaller y values)
+                            half_height = bin_height // 2
+                            half_bin_mask[y_min : y_min + half_height, x_min:x_max] = 1
+                        else:
+                            # keep left half (smaller x values)
+                            half_width = bin_width // 2
+                            half_bin_mask[y_min:y_max, x_min : x_min + half_width] = 1
                         masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Cheese_UNet.get_top_layer_binary(
                             Im.fromarray(masked_image_half), CHEESE_TOP_SLICE_PNG
@@ -728,11 +737,16 @@ class VisionNode(Node):
                         self.get_logger().info(
                             f"Meat area is too large: {max_contour_area} > {self.meat_area_pixels}, cropping out bottom 50% of bin and trying again..."
                         )
-                        
-                        # Crop out bottom 50% of the already cropped image
-                        half_height = (y_max - y_min) // 2
+                        # Mask out the bottom 50% along the longer axis (x or y)
+                        bin_width = x_max - x_min
+                        bin_height = y_max - y_min
                         half_bin_mask = np.zeros_like(image, dtype=np.uint8)
-                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        if bin_height >= bin_width:
+                            half_height = bin_height // 2
+                            half_bin_mask[y_min : y_min + half_height, x_min:x_max] = 1
+                        else:
+                            half_width = bin_width // 2
+                            half_bin_mask[y_min:y_max, x_min : x_min + half_width] = 1
                         masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Bologna_UNet.get_top_layer_binary(
                             Im.fromarray(masked_image_half), MEAT_TOP_SLICE_PNG
@@ -798,9 +812,16 @@ class VisionNode(Node):
                         self.get_logger().info(
                             f"Bread area is too large, cropping out bottom 50% of bin and trying again..."
                         )
-                        half_height = (y_max - y_min) // 2
+                        # Mask out the bottom 50% along the longer axis (x or y)
+                        bin_width = x_max - x_min
+                        bin_height = y_max - y_min
                         half_bin_mask = np.zeros_like(image, dtype=np.uint8)
-                        half_bin_mask[y_min:y_min+half_height, x_min:x_max] = 1
+                        if bin_height >= bin_width:
+                            half_height = bin_height // 2
+                            half_bin_mask[y_min : y_min + half_height, x_min:x_max] = 1
+                        else:
+                            half_width = bin_width // 2
+                            half_bin_mask[y_min:y_max, x_min : x_min + half_width] = 1
                         masked_image_half = image * half_bin_mask
                         mask, max_contour_mask, max_contour_area = self.Bread_UNet.get_top_layer_binary(
                             Im.fromarray(masked_image_half), BREAD_TOP_SLICE_PNG
