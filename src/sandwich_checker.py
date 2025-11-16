@@ -147,8 +147,8 @@ class SandwichChecker:
         self.predictor = SAM2ImagePredictor(sam2_model)
 
     def reset(self):
-        self.tray_contour = []
-        self.tray_center = None
+        # self.tray_contour = []
+        # self.tray_center = None
 
         self.cheese_contours = []
         self.cheese_centers = []
@@ -408,6 +408,9 @@ class SandwichChecker:
         center_y = int(np.mean(y_coords))
 
         bread_center = (center_x, center_y)
+
+        # this is the bottom bread, so clear previous bread centers
+        self.bread_centers = [] # clear previous bread centers, SANITY CHECK, this should already happen in reset()
         self.bread_centers.append(bread_center)
 
         # Check if bread is placed in tray
@@ -425,6 +428,10 @@ class SandwichChecker:
             )
             if distance > self.pass_threshold:
                 bread_on_tray = False
+        else:
+            raise ValueError(
+                "Tray center is not set. Please set it before checking bread placement."
+            )
 
         plot_image = image.copy()
 
@@ -438,6 +445,10 @@ class SandwichChecker:
                 5,
                 (0, 255, 0),
                 -1,
+            )
+        else:
+            raise ValueError(
+                "Tray center is not set. Please set it before checking bread placement."
             )
         
         # save image for debugging
