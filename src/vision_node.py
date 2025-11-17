@@ -2,6 +2,8 @@
 
 # Change above line if chaning .venv location
 # author: Oliver
+import time
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -939,25 +941,35 @@ class VisionNode(Node):
             )
 
             self.get_logger().info("transforming coordinates...")
-            response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
-            if (bin_id == 3 and response_transformed[2] < 0.07) or (
-                bin_id != 3 and response_transformed[2] < 0.14
-            ):  # Bin3 is deeper than the other bins
-                raise Exception("Z is too low, not a valid pickup point")
-            self.get_logger().info("got transform, applying it to point...")
-            z_offset = 0.008 if bin_id == 3 else 0.004  # TODO: tune these
-            response.x = response_transformed[0]
-            response.y = response_transformed[1]
-            response.z = (
-                response_transformed[2] - z_offset
-            )  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
+            response_transformed = None
+            is_reachable = False
+            for _ in range(3):
+                response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
+                if (bin_id == 3 and response_transformed[2] < 0.07) or (
+                    bin_id != 3 and response_transformed[2] < 0.14
+                ):  # Bin3 is deeper than the other bins
+                    raise Exception("Z is too low, not a valid pickup point")
+                self.get_logger().info("got transform, applying it to point...")
+                z_offset = 0.008 if bin_id == 3 else 0.004  # TODO: tune these
+                response.x = response_transformed[0]
+                response.y = response_transformed[1]
+                response.z = (
+                    response_transformed[2] - z_offset
+                )  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
 
-            self.get_logger().info(
-                f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
-            )
-            is_reachable = is_valid_pickup_point(
-                response.x, response.y, bin_id, 3, self.get_logger()
-            )
+                self.get_logger().info(
+                    f"Transformed coords: X: {response.x}, Y: {response.y}, Z:{response.z}"
+                )
+                is_reachable = is_valid_pickup_point(
+                    response.x, response.y, bin_id, 3, self.get_logger()
+                )
+                if is_reachable:
+                    break
+                else:
+                    self.get_logger().info("Pickup point not reachable, retrying...")
+                    time.sleep(0.5)
+                    rclpy.spin_once(self, timeout_sec=0.1)
+
             if not is_reachable:
                 raise Exception("Pickup points not within bin")
             self.get_logger().info("Pickup point is valid!")
@@ -968,8 +980,8 @@ class VisionNode(Node):
             response.x = -1.0
             response.y = -1.0
             response.z = float("nan")
-
-        return response
+        finally:
+            return response
 
     def handle_save_detection_image(self, request, response):
         """
