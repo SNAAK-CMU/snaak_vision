@@ -189,7 +189,11 @@ class VisionNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Error initializing segment generators: {e}")
                 raise e
-        
+        else:
+            self.cheese_segment_generator = None
+            self.tray_segment_generator = None
+            self.bread_segment_generator = None
+            self.meat_segment_generator = None
         # init UNets
         self.use_UNet = USE_UNET
         if self.use_UNet:
