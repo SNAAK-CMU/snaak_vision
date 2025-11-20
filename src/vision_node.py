@@ -63,7 +63,7 @@ IMG_HEIGHT = 480
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 TRAY_CENTER_PIXELS = [426, 202]  # in image pixels
 
-PICKUP_Z_OFFSET = 0.004
+PICKUP_Z_OFFSET = 0.006 # make this a bit lower
 
 # Bin coordinates in wrist camera image from pregrasp position (used for masking the image)
 # Bin2 coords
