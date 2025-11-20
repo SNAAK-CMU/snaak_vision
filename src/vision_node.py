@@ -1028,7 +1028,7 @@ class VisionNode(Node):
 
             if location_id == ASSEMBLY_TRAY_ID:
 
-                if self.tray_segment_generator:
+                if self.tray_segment_generator: # this will be None if SAM model not loaded, i.e., if use_UNet is True
                     self.get_logger().info(f"Segmenting tray")
 
                     mask = self.tray_segment_generator.get_tray_mask(image)
@@ -1053,6 +1053,7 @@ class VisionNode(Node):
                         np.array(image),
                     )
                 else:
+                    self.get_logger().info(f"Using predefined tray center")
                     cam_x = int(TRAY_CENTER_PIXELS[0])
                     cam_y = int(TRAY_CENTER_PIXELS[1])
 
