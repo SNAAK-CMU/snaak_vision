@@ -182,10 +182,10 @@ class VisionNode(Node):
         if self.use_SAM:
             self.get_logger().info("Using SAM for segmentation")
             try:
-                self.cheese_segment_generator = (CheeseSegmentGenerator() if self.use_SAM else None)
-                self.tray_segment_generator = TraySegmentGenerator() if self.use_SAM else None
-                self.bread_segment_generator = BreadSegmentGenerator() if self.use_SAM else None
-                self.meat_segment_generator = MeatSegmentGenerator() if self.use_SAM else None
+                self.cheese_segment_generator = CheeseSegmentGenerator()
+                self.tray_segment_generator = TraySegmentGenerator()
+                self.bread_segment_generator = BreadSegmentGenerator()
+                self.meat_segment_generator = MeatSegmentGenerator()
             except Exception as e:
                 self.get_logger().error(f"Error initializing segment generators: {e}")
                 raise e
