@@ -1157,11 +1157,7 @@ class SandwichChecker:
 
         valid_cheese = None
         plot_image = None
-        if ingredient_count == 1:
-            valid_cheese, plot_image = self.check_cheese_single(image)
-        else:
-            valid_cheese, plot_image = self.check_cheese_multi(image, ingredient_count)
-
+        valid_cheese, plot_image = self.check_cheese_single(image)
         return valid_cheese, plot_image
 
     def check_ham(self, image):
