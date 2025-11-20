@@ -63,6 +63,8 @@ IMG_HEIGHT = 480
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 TRAY_CENTER_PIXELS = [426, 202]  # in image pixels
 
+PICKUP_Z_OFFSET = 0.004
+
 # Bin coordinates in wrist camera image from pregrasp position (used for masking the image)
 # Bin2 coords
 BIN2_XMIN = 250
@@ -120,7 +122,6 @@ CHEESE_TOP_SLICE_PNG = [250, 106, 77]  # the mask color for top cheese slice
 BREAD_WIDTH = 0.15
 BREAD_HEIGHT = 0.10
 BREAD_TOP_SLICE_PNG = [250, 106, 77]  # the mask color for top cheese slice
-
 
 # Tray Dimensions in metres
 TRAY_WIDTH = 0.305
@@ -935,11 +936,10 @@ class VisionNode(Node):
 
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
             self.get_logger().info("Got transform, applying it to point...")
-            z_offset = 0.004  # TODO: tune these - required for good suction seal
             response.x = response_transformed[0]
             response.y = response_transformed[1]
             response.z = (
-                response_transformed[2] - z_offset
+                response_transformed[2] - PICKUP_Z_OFFSET
             ) 
 
             self.get_logger().info(
