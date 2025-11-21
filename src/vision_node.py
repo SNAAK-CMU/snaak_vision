@@ -31,7 +31,6 @@ import copy
 from segmentation.cheese_segment_generator import CheeseSegmentGenerator
 from segmentation.tray_segment_generator import TraySegmentGenerator
 from segmentation.bread_segment_generator import BreadSegmentGenerator
-from segmentation.plate_bread_segment_generator import PlateBreadSegementGenerator
 from segmentation.meat_segment_generator import MeatSegmentGenerator
 from segmentation.segment_utils import (
     calc_bbox_from_mask,
@@ -64,7 +63,7 @@ IMG_HEIGHT = 480
 TRAY_CENTER = [0.48, 0.0, 0.29]  # in arm frame
 TRAY_CENTER_PIXELS = [426, 202]  # in image pixels
 
-PICKUP_Z_OFFSET = 0.004
+PICKUP_Z_OFFSET = 0.006 # make this a bit lower
 
 # Bin coordinates in wrist camera image from pregrasp position (used for masking the image)
 # Bin2 coords
@@ -135,8 +134,7 @@ MEAT_TOP_SLICE_PNG = [61, 61, 245]  # the mask color for top bologna slice
 
 FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/failure_images/"
 
-############################################
-
+#########################################################################
 
 class VisionNode(Node):
     def __init__(self):
@@ -179,40 +177,58 @@ class VisionNode(Node):
         self.detection_image = None
         self.detection_image_count = 0
 
-        # init segmentation objects
+        # init SAM segment generators
         self.use_SAM = not USE_UNET
-        self.cheese_segment_generator = (
-            CheeseSegmentGenerator() if self.use_SAM else None
-        )
-        self.tray_segment_generator = TraySegmentGenerator()
-        self.bread_segment_generator = BreadSegmentGenerator()
-        self.plate_bread_segment_generator = PlateBreadSegementGenerator()
-        self.meat_segment_generator = MeatSegmentGenerator() if self.use_SAM else None
-
-        # init UNet
+        if self.use_SAM:
+            self.get_logger().info("Using SAM for segmentation")
+            try:
+                self.cheese_segment_generator = CheeseSegmentGenerator()
+                self.tray_segment_generator = TraySegmentGenerator()
+                self.bread_segment_generator = BreadSegmentGenerator()
+                self.meat_segment_generator = MeatSegmentGenerator()
+            except Exception as e:
+                self.get_logger().error(f"Error initializing segment generators: {e}")
+                raise e
+        else:
+            self.cheese_segment_generator = None
+            self.tray_segment_generator = None
+            self.bread_segment_generator = None
+            self.meat_segment_generator = None
+        # init UNets
         self.use_UNet = USE_UNET
-        self.Cheese_UNet = Ingredients_UNet(
-            count=False,
-            classes=["background", "top_cheese", "other_cheese"],
-            model_path="logs/cheese/UNet_CHE_000/best_epoch_weights.pth",  # choose weights
-            mix_type=1,
-            num_classes=3,
-        )
+        if self.use_UNet:
+            self.get_logger().info("Using UNet for segmentation")
 
-        self.Bologna_UNet = Ingredients_UNet(
-            count=False,
-            classes=["background", "", "", "top_bologna", "other_bologna"],
-            model_path="logs/ham/UNet_BOL_000/best_epoch_weights.pth",
-            mix_type=1,
-            num_classes=5,
-        )
-        self.Bread_UNet = Ingredients_UNet(
-            count=False,
-            classes=["background", "top_bread", "other_bread"],
-            mix_type=1,
-            num_classes=3,
-            model_path="logs/bread/UNet_BRE_001/best_epoch_weights.pth",
-        )
+            try:
+                self.Cheese_UNet = Ingredients_UNet(
+                    count=False,
+                    classes=["background", "top_cheese", "other_cheese"],
+                    model_path="logs/cheese/UNet_CHE_000/best_epoch_weights.pth",  # choose weights
+                    mix_type=1,
+                    num_classes=3,
+                )
+
+                self.Bologna_UNet = Ingredients_UNet(
+                    count=False,
+                    classes=["background", "", "", "top_bologna", "other_bologna"],
+                    model_path="logs/ham/UNet_BOL_000/best_epoch_weights.pth",
+                    mix_type=1,
+                    num_classes=5,
+                )
+                self.Bread_UNet = Ingredients_UNet(
+                    count=False,
+                    classes=["background", "top_bread", "other_bread"],
+                    mix_type=1,
+                    num_classes=3,
+                    model_path="logs/bread/UNet_BRE_001/best_epoch_weights.pth",
+                )
+            except Exception as e:
+                self.get_logger().error(f"Error initializing UNet models: {e}")
+                raise e
+        else:
+            self.Cheese_UNet = None
+            self.Bologna_UNet = None
+            self.Bread_UNet = None 
 
         # init sandwich checker
         self.use_UNet_for_check = USE_UNET_FOR_CHECK
@@ -423,16 +439,6 @@ class VisionNode(Node):
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
             self.get_logger().info(f"Ingredient count: {ingredient_count}")
 
-            if ingredient_name == "bread_bottom":
-                # set tray center in sandwich check class, so that later we can detect newly placed trays and update their centers for new assemblies
-                # transform the tray center to camera frame
-                # self.get_logger().info("Setting Tray Center...")
-                # tray_center_cam = self.transform_location_base2cam(
-                #     TRAY_CENTER[0], TRAY_CENTER[1], TRAY_CENTER[2]
-                # )
-                # self.sandwich_checker.set_tray_center(tray_center_cam)
-                pass
-
             ingredient_check, check_image = self.sandwich_checker.check_ingredient(
                 image=image,
                 ingredient_name=ingredient_name,
@@ -507,7 +513,6 @@ class VisionNode(Node):
         :return: Transformed coordinates in base link frame
 
         """
-
         # apply intrinsic transform:
         point_img_frame = np.array([x, y, 1])
         point_cam = np.linalg.inv(self.K) @ point_img_frame
@@ -716,7 +721,6 @@ class VisionNode(Node):
                         "UNet did not detect any cheese in bin. Please check the image"
                     )
 
-                # self.get_logger().info(f"Max value in mask {mask_truth_value}")
                 # Average the true pixels in binary mask to get center X, Y
                 y_coords, x_coords = np.where(mask == mask_truth_value)
                 cam_x = int(np.mean(x_coords))
@@ -847,8 +851,6 @@ class VisionNode(Node):
                     masked_image_bgr,
                 )
                 if self.use_UNet:
-                    # Save cropped image for debugging
-
                     # Use the UNet model for bread segmentation
                     mask, max_contour_mask, max_contour_area = (
                         self.Bread_UNet.get_top_layer_binary(
@@ -931,17 +933,14 @@ class VisionNode(Node):
             # Retrieve depth value at (x, y)
             cam_z = self.get_depth(cam_x, cam_y)
 
-            # These adjustments need to be removed and the detection should be adjusted to account for the end effector size
-            # cam_z += 0.05  # now the end effector just touches the cheese, we need it to go a little lower to actually make a seal
-            # cam_x += 0.02  # the x is a little off - either the end effector is incorrectly described or the detection needs to be adjusted
-
+            # sanity check
             if cam_z == 0:
                 raise Exception("Invalid Z")
             self.get_logger().info(
                 f"Got pickup point in optical frame: {cam_x}, {cam_y} and depth: {cam_z:.2f} in bin {bin_id} at {timestamp}"
             )
 
-            self.get_logger().info("transforming coordinates...")
+            self.get_logger().info("Transforming pickup point from camera optical frame to base frame...")
 
             response_transformed = self.transform_location_cam2base(cam_x, cam_y, cam_z)
             self.get_logger().info("Got transform, applying it to point...")
@@ -1036,52 +1035,39 @@ class VisionNode(Node):
             )
 
             if location_id == ASSEMBLY_TRAY_ID:
-                self.get_logger().info(f"Segmenting tray")
 
-                mask = self.tray_segment_generator.get_tray_mask(image)
+                if self.tray_segment_generator: # this will be None if SAM model not loaded, i.e., if use_UNet is True
+                    self.get_logger().info(f"Segmenting tray")
 
-                self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
+                    mask = self.tray_segment_generator.get_tray_mask(image)
 
-                # Average the positions of white points to get center
-                y_coords, x_coords = np.where(mask == 1)
-                cam_x = int(np.mean(x_coords))
-                cam_y = int(np.mean(y_coords))
+                    self.assembly_tray_box = calc_bbox_from_mask(mask * 255)
 
-                # Save images for debugging
-                cv2.circle(
-                    np.array(image), (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_mask.jpg",
-                    mask * 255,
-                )
-                cv2.imwrite(
-                    "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_img.jpg",
-                    np.array(image),
-                )
+                    # Average the positions of white points to get center
+                    y_coords, x_coords = np.where(mask == 1)
+                    cam_x = int(np.mean(x_coords))
+                    cam_y = int(np.mean(y_coords))
+
+                    # Save images for debugging
+                    cv2.circle(
+                        np.array(image), (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1
+                    )
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_mask.jpg",
+                        mask * 255,
+                    )
+                    cv2.imwrite(
+                        "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/tray_img.jpg",
+                        np.array(image),
+                    )
+                else:
+                    self.get_logger().info(f"Using predefined tray center")
+                    cam_x = int(TRAY_CENTER_PIXELS[0])
+                    cam_y = int(TRAY_CENTER_PIXELS[1])
 
             elif location_id == ASSEMBLY_BREAD_ID:
-                # image = cv2.cvtColor(np.array(self.rgb_image), cv2.COLOR_RGB2BGR)
-                # self.get_logger().info(f"Segmenting Bread")
-                # mask = self.bread_segment_generator.get_bread_placement_mask(image)
-
-                # self.get_logger().info(f"Bread segmentation completed")
-
-                # # Average the positions of white points to get center
-                # y_coords, x_coords = np.where(mask == 255)
-                # cam_x = int(np.mean(x_coords))
-                # cam_y = int(np.mean(y_coords))
-
-                # # Save images for debugging
-                # cv2.circle(image, (cam_x, cam_y), 10, color=(255, 0, 0), thickness=-1)
-                # cv2.imwrite(
-                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_mask.jpg",
-                #     mask,
-                # )
-                # cv2.imwrite(
-                #     "/home/snaak/Documents/manipulation_ws/src/snaak_vision/src/segmentation/bread_place_img.jpg",
-                #     image,
-                # )
+                # Just get the bottom bread center from sandwich checker
+                self.get_logger().info(f"Getting bottom bread center for placing")
                 bottom_bread_center = self.sandwich_checker.bread_centers[0]
                 cam_x = int(bottom_bread_center[0])
                 cam_y = int(bottom_bread_center[1])
