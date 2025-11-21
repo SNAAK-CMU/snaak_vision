@@ -225,6 +225,10 @@ class VisionNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Error initializing UNet models: {e}")
                 raise e
+        else:
+            self.Cheese_UNet = None
+            self.Bologna_UNet = None
+            self.Bread_UNet = None 
 
         # init sandwich checker
         self.use_UNet_for_check = USE_UNET_FOR_CHECK
