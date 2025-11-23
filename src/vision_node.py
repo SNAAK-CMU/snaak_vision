@@ -20,7 +20,7 @@ from PIL import Image as Im
 import os
 from collections import deque
 
-
+from rclpy.time import Time
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from tf2_msgs.msg import TFMessage
 import numpy as np
@@ -138,12 +138,13 @@ FAILURE_IMAGES_PATH = "/home/snaak/Documents/manipulation_ws/src/snaak_vision/sr
 
 class VisionNode(Node):
     def __init__(self):
+
         super().__init__("snaak_vision")
         self.bridge = CvBridge()
         self.depth_image = None
         self.depth_queue = deque()
-        self.rgb_image = None
-
+        # self.rgb_image = None
+        self.prev_time = self.get_clock().now()
         # camera FOV over assembly area
         self.fov_w = FOV_WIDTH  # metres
         self.fov_h = FOV_HEIGHT  # metres
@@ -263,6 +264,7 @@ class VisionNode(Node):
         self.RGB_subscription = self.create_subscription(
             Image, "/camera/camera/color/image_rect_raw", self.rgb_callback, 10
         )
+        self.rgb_msg = None
 
         # Create the service server
         self.service = self.create_service(
@@ -344,6 +346,18 @@ class VisionNode(Node):
 
     def tf_listener_callback_tf(self, msg):
         """Handle incoming transform messages."""
+        # current_time = self.get_clock().now()
+        # time_diff = (current_time - self.prev_time).nanoseconds / 1e9
+        # self.get_logger().info(f"Time difference between TF messages: {time_diff:.6f} seconds")
+        # self.prev_time = current_time
+
+        # if msg.transforms:
+        #     msg_header = msg.transforms[0].header
+        #     msg_time_ns = msg_header.stamp.sec * 1_000_000_000 + msg_header.stamp.nanosec
+            
+        #     self.get_logger().info(f"TF message time difference : {(current_time.nanoseconds - msg_time_ns)/1e9:.6f} seconds")
+
+        # # self.get_logger().debug( + " - Received TF message")
         try:
             for transform in msg.transforms:
                 if transform.child_frame_id and transform.header.frame_id:
@@ -372,15 +386,16 @@ class VisionNode(Node):
 
     def rgb_callback(self, msg):
         """Convert ROS Image message to OpenCV format"""
-        try:
-            self.rgb_image = self.bridge.imgmsg_to_cv2(
-                msg, desired_encoding="passthrough"
-            )
-        except CvBridgeError as e:
-            self.get_logger().error(
-                f"Failed to convert image message to OpenCV format: {e}"
-            )
-            self.rgb_image = None
+        self.rgb_msg = msg
+        # try:
+        #     self.rgb_image = self.bridge.imgmsg_to_cv2(
+        #         msg, desired_encoding="passthrough"
+        #     )
+        # except CvBridgeError as e:
+        #     self.get_logger().error(
+        #         f"Failed to convert image message to OpenCV format: {e}"
+        #     )
+        #     self.rgb_image = None
 
     def camera_intrinsics_callback(self, msg):
         """Handle incoming camera info messages."""
@@ -433,9 +448,22 @@ class VisionNode(Node):
         try:
             ingredient_name = request.ingredient_name
             ingredient_count = request.ingredient_count
-            if self.rgb_image is None:
+
+            if self.rgb_msg is None:
                 raise Exception("No RGB Image found!")
-            image = cv2.cvtColor(self.rgb_image, cv2.COLOR_RGB2BGR)
+            
+            rgb_msg = self.rgb_msg # create local copy
+            try:
+                rgb_image = self.bridge.imgmsg_to_cv2(
+                    rgb_msg, desired_encoding="passthrough"
+                )
+            except CvBridgeError as e:  
+                self.get_logger().error(
+                    f"Failed to convert image message to OpenCV format: {e}"
+                )
+
+
+            image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
             self.get_logger().info(f"Checking ingredient: {ingredient_name}")
             self.get_logger().info(f"Ingredient count: {ingredient_count}")
 
@@ -626,11 +654,21 @@ class VisionNode(Node):
             bin_id = request.location_id
             ingredient_name = request.ingredient_name
             timestamp = request.timestamp  # TODO: use this to sync
-            if self.rgb_image is None:
-                raise Exception("No RGB image found!")
+            
+            if self.rgb_msg is None:
+                raise Exception("No RGB Image found!")
+            
+            rgb_msg = self.rgb_msg # create local copy
+            try:
+                rgb_image = self.bridge.imgmsg_to_cv2(
+                    rgb_msg, desired_encoding="passthrough"
+                )
+            except CvBridgeError as e:  
+                self.get_logger().error(
+                    f"Failed to convert image message to OpenCV format: {e}"
+                )
 
-            image = np.copy(self.rgb_image)
-            # self.get_logger().info(f"{image.shape}")
+            image = np.copy(rgb_image)
             self.detection_image = np.copy(image)
 
             self.get_logger().info(f"Got request for pickup point in bin ID: {bin_id}")
@@ -1023,10 +1061,21 @@ class VisionNode(Node):
             location_id = request.location_id
             timestamp = request.timestamp  # use this to sync
 
-            if self.rgb_image is None:
-                raise Exception("No RGB image available!")
+            if self.rgb_msg is None:
+                raise Exception("No RGB Image found!")
+            
+            rgb_msg = self.rgb_msg # create local copy
+            try:
+                rgb_image = self.bridge.imgmsg_to_cv2(
+                    rgb_msg, desired_encoding="passthrough"
+                )
+            except CvBridgeError as e:  
+                self.get_logger().error(
+                    f"Failed to convert image message to OpenCV format: {e}"
+                )
 
-            image = np.copy(self.rgb_image)
+            image = np.copy(rgb_image)
+
             self.get_logger().info(
                 f"Handle Place Point Called with location ID: {location_id}"
             )
